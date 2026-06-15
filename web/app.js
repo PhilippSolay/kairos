@@ -214,12 +214,72 @@ function icoSvg(key) {
   return p ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>` : "";
 }
 function companySlug(name) { return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+
+// Custom (user-uploaded) icons are stored in companyIcons as "custom:<id>" and
+// rendered via <img src="/api/icon/<id>"> — same safe path as the shipped icons.
+function isCustomIcon(v) { return typeof v === "string" && v.startsWith("custom:"); }
+function customIconUrl(v) { return "/api/icon/" + encodeURIComponent(v.slice(7)); }
+function customImg(v, alt, cls) {
+  return `<img class="co-custom${cls ? " " + cls : ""}" src="${customIconUrl(v)}" alt="${esc(alt || "")}" draggable="false" onerror="this.remove()" />`;
+}
+// Inner glyph markup for a small icon slot — built-in (inline svg) or custom (<img>).
+function iconInner(v) { return isCustomIcon(v) ? customImg(v) : icoSvg(v); }
+const UPLOAD_GLYPH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>';
+
 function companyGlyph(slug, label) {
   const chosen = (uiPrefs.companyIcons || {})[label];     // user-chosen icon wins
+  if (isCustomIcon(chosen)) return customImg(chosen, label);
   if (chosen && ICON_PATHS[chosen]) return `<span class="co-ico">${icoSvg(chosen)}</span>`;
   return COMPANY_ICONS.has(slug)
     ? `<img src="/icons/icon_company_${slug}.svg" alt="${esc(label)}" draggable="false" />`
     : `<span class="co-text">${esc(label)}</span>`;
+}
+
+// Upload an .svg File, returns its server-side id. Validates client-side first for fast feedback.
+async function uploadCompanyIcon(file) {
+  if (!file) throw new Error("No file chosen.");
+  const fname = (file.name || "").toLowerCase();
+  if (file.type !== "image/svg+xml" && !fname.endsWith(".svg")) throw new Error("Please choose an .svg file.");
+  if (file.size > 64 * 1024) throw new Error("SVG too large (max 64 KB).");
+  const svg = await file.text();
+  const res = await fetch("/api/icon", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Kiros-CSRF": cookie("kiros_csrf") },
+    body: JSON.stringify({ svg }),
+  });
+  if (res.status === 401) { location.href = "/login"; throw new Error("auth required"); }
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* fall through to generic error */ }
+  if (!res.ok || !data.ok) throw new Error(data.error || "Upload failed.");
+  return data.id;
+}
+
+// Shared icon picker: built-in glyphs + an "upload SVG" tile (which also previews a chosen custom icon).
+function buildIconPicker(pickEl, current, onPick) {
+  pickEl.innerHTML = "";
+  Object.keys(ICON_PATHS).forEach((k) => {
+    const b = el("button", "onb-ico" + (k === current ? " on" : ""));
+    b.type = "button"; b.innerHTML = icoSvg(k); b.title = k;
+    b.onclick = () => onPick(k);
+    pickEl.appendChild(b);
+  });
+  const isCustom = isCustomIcon(current);
+  const up = el("button", "onb-ico onb-ico-up" + (isCustom ? " on" : ""));
+  up.type = "button";
+  up.title = isCustom ? "Change custom icon" : "Upload your own SVG";
+  up.innerHTML = isCustom ? iconInner(current) : UPLOAD_GLYPH;
+  const file = document.createElement("input");
+  file.type = "file"; file.accept = ".svg,image/svg+xml"; file.hidden = true;
+  up.onclick = () => file.click();
+  file.onchange = async () => {
+    const f = file.files && file.files[0];
+    file.value = "";
+    if (!f) return;
+    try { onPick("custom:" + await uploadCompanyIcon(f)); }
+    catch (e) { toast(e.message || "Upload failed."); }
+  };
+  up.appendChild(file);
+  pickEl.appendChild(up);
 }
 // Render an "All" + per-company icon toggle into `sel`, wired to mutate `state.company`.
 function buildCompanyToggle(sel, state, onChange) {
@@ -889,25 +949,21 @@ function renderStructure() {
   Object.keys(groups).forEach((company) => {
     const sec = el("div", "struct-co");
     const cur = (uiPrefs.companyIcons || {})[company];
+    const hasIco = isCustomIcon(cur) || (cur && !!ICON_PATHS[cur]);
     const head = el("div", "struct-co-head");
-    const icoBtn = el("button", "struct-co-ico" + (cur && ICON_PATHS[cur] ? "" : " empty"));
+    const icoBtn = el("button", "struct-co-ico" + (hasIco ? "" : " empty"));
     icoBtn.type = "button";
     icoBtn.title = "Choose icon";
-    icoBtn.innerHTML = cur && ICON_PATHS[cur] ? icoSvg(cur) : "+";
+    icoBtn.innerHTML = hasIco ? iconInner(cur) : "+";
     const picker = el("div", "onb-iconpick struct-iconpick");
     picker.hidden = true;
-    Object.keys(ICON_PATHS).forEach((k) => {
-      const b = el("button", "onb-ico" + (k === cur ? " on" : ""));
-      b.type = "button"; b.innerHTML = icoSvg(k); b.title = k;
-      b.onclick = () => {
-        const icons = { ...(uiPrefs.companyIcons || {}) };
-        icons[company] = k;
-        uiPrefs.companyIcons = icons;
-        saveUiPrefs({ companyIcons: icons });
-        renderStructure();
-        refreshCompanyToggles();      // show the new icon in the nav
-      };
-      picker.appendChild(b);
+    buildIconPicker(picker, cur, (val) => {
+      const icons = { ...(uiPrefs.companyIcons || {}) };
+      icons[company] = val;
+      uiPrefs.companyIcons = icons;
+      saveUiPrefs({ companyIcons: icons });
+      renderStructure();
+      refreshCompanyToggles();      // show the new icon in the nav
     });
     icoBtn.onclick = () => { picker.hidden = !picker.hidden; };
     const nameIn = document.createElement("input");
@@ -1740,16 +1796,12 @@ const ONB_RENDER = {
        </div>
        <div class="onb-colist" id="onb-colist"></div>`;
     const pick = wrap.querySelector("#onb-iconpick");
-    Object.keys(ICON_PATHS).forEach((k) => {
-      const b = el("button", "onb-ico" + (k === onbPickedIcon ? " on" : ""));
-      b.type = "button"; b.innerHTML = icoSvg(k); b.title = k;
-      b.onclick = () => { onbPickedIcon = k; pick.querySelectorAll(".onb-ico").forEach((x) => x.classList.remove("on")); b.classList.add("on"); };
-      pick.appendChild(b);
-    });
+    const paintPick = () => buildIconPicker(pick, onbPickedIcon, (val) => { onbPickedIcon = val; paintPick(); });
+    paintPick();
     const list = wrap.querySelector("#onb-colist");
     const renderList = () => {
       list.innerHTML = onbCompanies.map((c, i) =>
-        `<span class="onb-cochip"><span class="co-ico">${icoSvg(c.icon)}</span>${esc(c.name)}<button type="button" data-i="${i}" aria-label="Remove">✕</button></span>`).join("");
+        `<span class="onb-cochip"><span class="co-ico">${iconInner(c.icon)}</span>${esc(c.name)}<button type="button" data-i="${i}" aria-label="Remove">✕</button></span>`).join("");
       list.querySelectorAll("button[data-i]").forEach((b) => b.onclick = () => { onbCompanies.splice(Number(b.dataset.i), 1); renderList(); });
     };
     const add = () => {

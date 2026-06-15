@@ -47,6 +47,15 @@ class Client:
             e.close()
             return e.code, None
 
+    def get_raw(self, path: str):
+        """GET returning (status, content_type, body_bytes, headers) for non-JSON endpoints."""
+        try:
+            with self.opener.open(urllib.request.Request(self.base + path), timeout=5) as r:
+                return r.status, r.headers.get("Content-Type"), r.read(), dict(r.headers)
+        except urllib.error.HTTPError as e:
+            e.close()
+            return e.code, None, b"", {}
+
     def post(self, path: str, data: dict, with_csrf: bool = True):
         headers = {"Content-Type": "application/json"}
         if with_csrf:
@@ -65,7 +74,9 @@ class Client:
             return e.code, body
 
 
-class TestIsolation(unittest.TestCase):
+class _ServerCase(unittest.TestCase):
+    """Boots an isolated kiros_web.py + temp data dir per subclass (own admin bootstrap)."""
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp()
@@ -94,6 +105,8 @@ class TestIsolation(unittest.TestCase):
         except Exception:
             cls.proc.kill()
 
+
+class TestIsolation(_ServerCase):
     def test_tenant_isolation_and_guards(self):
         a, b = Client(self.base), Client(self.base)
 
@@ -135,6 +148,84 @@ class TestIsolation(unittest.TestCase):
         # Logout invalidates the session.
         a.post("/api/auth/logout", {})
         self.assertEqual(a.get("/api/tasks")[0], 401)
+
+
+class TestCustomIcons(_ServerCase):
+    def test_custom_icon_upload_serve_and_isolation(self):
+        a, b = Client(self.base), Client(self.base)
+        a.post("/api/auth/signup", {"email": "ic_a@x.co", "name": "A", "password": "password1"}, with_csrf=False)
+        b.post("/api/auth/signup", {"email": "ic_b@x.co", "name": "B", "password": "password1"}, with_csrf=False)
+
+        good = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>'
+
+        # Upload needs a session and a CSRF token.
+        self.assertEqual(Client(self.base).post("/api/icon", {"svg": good})[0], 401)
+        self.assertEqual(a.post("/api/icon", {"svg": good}, with_csrf=False)[0], 403)
+
+        # Valid upload → id; serving it back is a sandboxed, nosniff SVG.
+        status, body = a.post("/api/icon", {"svg": good})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        iid = body["id"]
+        st, ctype, raw, hdrs = a.get_raw("/api/icon/" + iid)
+        self.assertEqual(st, 200)
+        self.assertEqual(ctype, "image/svg+xml")
+        self.assertIn(b"<svg", raw)
+        self.assertEqual(hdrs.get("X-Content-Type-Options"), "nosniff")
+        self.assertIn("sandbox", hdrs.get("Content-Security-Policy", ""))
+
+        # Isolation: B cannot fetch A's icon (serve path derives from B's own uid).
+        self.assertEqual(b.get_raw("/api/icon/" + iid)[0], 404)
+
+        # Malicious / invalid SVGs are rejected at upload.
+        for bad in (
+            '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            '<svg xmlns="http://www.w3.org/2000/svg" onload="x()"><rect/></svg>',
+            '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil/x.png"/></svg>',
+            '<html><body>nope</body></html>',
+        ):
+            self.assertEqual(a.post("/api/icon", {"svg": bad})[0], 400)
+
+        # Bad ids never traverse out of the per-user icons dir.
+        self.assertEqual(a.get_raw("/api/icon/not-hex-..%2F..%2Fprefs")[0], 404)
+        self.assertEqual(a.get_raw("/api/icon/deadbeefdeadbeef")[0], 404)  # well-formed but absent
+
+
+class TestSvgValidation(unittest.TestCase):
+    """Unit coverage for the SVG sanitiser (no server needed)."""
+
+    def setUp(self):
+        import kiros_web
+        self.validate = kiros_web.validate_svg
+
+    def test_accepts_clean_svg(self):
+        clean, err = self.validate('<svg xmlns="http://www.w3.org/2000/svg"><rect width="4" height="4"/></svg>')
+        self.assertIsNone(err)
+        self.assertIn("<svg", clean)
+
+    def test_rejects_unsafe_or_invalid(self):
+        for c in (
+            "",
+            "<svg><script>alert(1)</script></svg>",
+            '<svg onload="x()"><rect/></svg>',
+            '<svg><rect onclick="x()"/></svg>',
+            "<svg><foreignObject/></svg>",
+            '<svg><image href="https://evil/x"/></svg>',
+            '<svg><image href="//evil/x"/></svg>',
+            '<svg><a href="javascript:alert(1)"/></svg>',
+            '<!DOCTYPE svg [<!ENTITY a "b">]><svg/>',
+            "<html>no</html>",
+            "<svg><rect>",            # malformed XML
+            "<div><svg/></div>",      # well-formed but root isn't <svg>
+        ):
+            clean, err = self.validate(c)
+            self.assertIsNotNone(err, f"should reject: {c!r}")
+            self.assertIsNone(clean)
+
+    def test_rejects_oversize(self):
+        big = '<svg xmlns="http://www.w3.org/2000/svg">' + "<rect/>" * 20000 + "</svg>"
+        _, err = self.validate(big)
+        self.assertIsNotNone(err)
 
 
 if __name__ == "__main__":

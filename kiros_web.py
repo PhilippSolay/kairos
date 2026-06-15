@@ -22,6 +22,7 @@ import shutil
 import sys
 import threading
 import webbrowser
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from http.cookies import SimpleCookie
@@ -134,6 +135,10 @@ def done_file(uid: str) -> Path:
 
 def prefs_file(uid: str) -> Path:
     return user_dir(uid) / "prefs.json"
+
+
+def icons_dir(uid: str) -> Path:
+    return user_dir(uid) / "icons"
 
 
 def ensure_user_data(uid: str) -> Path:
@@ -508,6 +513,41 @@ DEFAULT_PREFS = {"theme": "system", "accent": "", "bgColor": "", "bgImage": None
 BG_MAX_BYTES = 4 * 1024 * 1024
 _BG_DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,(.+)$", re.DOTALL)
 
+# --- Custom company icons (user-uploaded SVG) --------------------------------
+# SVG is an XSS vector, so uploads are: validated here (reject scripts / event
+# handlers / external refs / non-SVG), stored per-user, and only ever rendered
+# via <img src> (browsers run no scripts in img-loaded SVGs) with nosniff + a
+# sandbox CSP. Served only to the owning session — never cross-user.
+ICON_MAX_BYTES = 64 * 1024
+ICON_MAX_COUNT = 40
+_ICON_ID_RE = re.compile(r"^[a-f0-9]{6,40}$")
+_SVG_FORBIDDEN = re.compile(
+    r"<\s*(?:script|foreignobject|iframe|embed|object|audio|video|set|animate|handler)\b"
+    r"|<!doctype|<!entity|javascript:|data:text/html"
+    r"|\son[a-z]+\s*=",                                  # inline event handlers (onload=, onclick=, ...)
+    re.IGNORECASE)
+_SVG_EXT_REF = re.compile(r"(?:xlink:href|href|src)\s*=\s*[\"']?\s*(?:https?:)?//", re.IGNORECASE)
+
+
+def validate_svg(text: str):
+    """Return (clean_svg, None) if safe to store, else (None, error_message)."""
+    s = (text or "").strip()
+    if not s:
+        return None, "Empty file."
+    if len(s.encode("utf-8")) > ICON_MAX_BYTES:
+        return None, "SVG too large (max 64 KB)."
+    if "<svg" not in s.lower():
+        return None, "Not an SVG file."
+    if _SVG_FORBIDDEN.search(s) or _SVG_EXT_REF.search(s):
+        return None, "SVG contains disallowed content (scripts or external references)."
+    try:
+        root = ET.fromstring(s)                          # also rejects malformed / entity-laden XML
+    except ET.ParseError:
+        return None, "SVG isn't valid XML."
+    if root.tag.rsplit("}", 1)[-1].lower() != "svg":     # strip namespace, require <svg> root
+        return None, "Root element must be <svg>."
+    return s, None
+
 
 def load_prefs(uid: str) -> dict:
     try:
@@ -572,7 +612,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     # -- response helpers --
-    def _send(self, status: int, body: bytes, content_type: str, cookies=None) -> None:
+    def _send(self, status: int, body: bytes, content_type: str, cookies=None, extra=None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -580,6 +620,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        for (hk, hv) in (extra or []):
+            self.send_header(hk, hv)
         for c in (cookies or []):
             self.send_header("Set-Cookie", c)
         self.end_headers()
@@ -677,6 +719,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(load_prefs(uid))
         elif path == "/api/bg":
             self._serve_bg(uid)
+        elif path.startswith("/api/icon/"):
+            self._serve_icon(uid, path[len("/api/icon/"):])
         elif path == "/api/admin/users":
             if not user["is_admin"]:
                 self._json({"error": "forbidden"}, 403)
@@ -766,6 +810,35 @@ class Handler(BaseHTTPRequestHandler):
         save_prefs(uid, {"bgImage": name})
         self._json({"ok": True, "image": name})
 
+    # -- custom company icons --
+    def _serve_icon(self, uid: str, iid: str) -> None:
+        iid = iid.split("/")[0]
+        if not _ICON_ID_RE.match(iid):
+            self._send(404, b"not found", "text/plain")
+            return
+        target = icons_dir(uid) / (iid + ".svg")      # path derives only from session uid
+        if not target.is_file():
+            self._send(404, b"not found", "text/plain")
+            return
+        self._send(200, target.read_bytes(), "image/svg+xml",
+                   extra=[("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")])
+
+    def _icon_upload(self, uid: str, body: dict) -> None:
+        clean, err = validate_svg(str(body.get("svg", "")))
+        if err:
+            self._json({"ok": False, "error": err}, 400)
+            return
+        d = icons_dir(uid)
+        d.mkdir(parents=True, exist_ok=True)
+        iid = hashlib.sha256(clean.encode("utf-8")).hexdigest()[:16]   # content-addressed: dedups re-uploads
+        target = d / (iid + ".svg")
+        if not target.exists():
+            if len(list(d.glob("*.svg"))) >= ICON_MAX_COUNT:
+                self._json({"ok": False, "error": "Too many custom icons. Remove some first."}, 413)
+                return
+            target.write_text(clean, encoding="utf-8")
+        self._json({"ok": True, "id": iid})
+
     # -- profile --
     def _profile_name(self, uid: str, body: dict) -> None:
         name = str(body.get("name", "")).strip()
@@ -854,6 +927,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/bg":
             self._bg_upload(uid, body)
+            return
+        if path == "/api/icon":
+            self._icon_upload(uid, body)
             return
         if path == "/api/profile/name":
             self._profile_name(uid, body)

@@ -755,6 +755,7 @@ html[data-theme="light"] {
 .struct-co-head .struct-co-name { margin: 0; }
 .struct-co-ico { width: 26px; height: 26px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; color: var(--accent); cursor: pointer; padding: 0; }
 .struct-co-ico svg { width: 16px; height: 16px; }
+.struct-co-ico img { width: 18px; height: 18px; object-fit: contain; }
 .struct-co-ico.empty { color: var(--muted); font-size: 17px; line-height: 1; }
 .struct-iconpick { margin: 8px 0 6px; }
 .onb-iconpick[hidden] { display: none; }   /* .onb-iconpick is display:grid, which would beat plain [hidden] */
@@ -790,6 +791,7 @@ html[data-theme="light"] {
 .co-btn .co-ico { color: var(--accent); opacity: 0.55; transition: opacity 0.18s var(--ease); }
 .co-btn:hover .co-ico { opacity: 0.85; }
 .co-btn.is-active .co-ico { opacity: 1; }
+.co-btn .co-custom { object-fit: contain; }   /* custom SVG keeps its own colors (like the shipped icons) */
 
 /* Onboarding */
 .onb { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
@@ -809,6 +811,7 @@ html[data-theme="light"] {
 .onb-ico { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: var(--surface-2);
   border: 1px solid var(--border); border-radius: 10px; color: var(--muted); cursor: pointer; padding: 0; transition: all 0.12s var(--ease); }
 .onb-ico svg { width: 18px; height: 18px; }
+.onb-ico img { width: 20px; height: 20px; object-fit: contain; }
 .onb-ico:hover { color: var(--text); }
 .onb-ico.on { border-color: var(--accent); color: var(--accent); }
 .onb-addrow { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -819,6 +822,7 @@ html[data-theme="light"] {
 .onb-cochip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2);
   border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px 5px 11px; font-size: 14px; }
 .onb-cochip .co-ico svg { width: 15px; height: 15px; }
+.onb-cochip .co-ico img { width: 16px; height: 16px; object-fit: contain; }
 .onb-cochip button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 2px; }
 .onb-themeseg { margin: 0 auto 18px; width: fit-content; }
 .onb-accents { justify-content: center; margin-bottom: 8px; }
