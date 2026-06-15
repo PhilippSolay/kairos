@@ -69,9 +69,11 @@ function focusCard(t, eyebrow) {
   const actions = card.querySelector(".frog-actions");
   const start = el("button", "primary", "Start · 2 min");
   const done = el("button", "ghost done", "Done ✓");
-  start.onclick = () => startTimer(actions, start);
-  done.onclick = () => complete(t.raw);
+  start.onclick = (e) => { e.stopPropagation(); startTimer(actions, start); };
+  done.onclick = (e) => { e.stopPropagation(); complete(t.raw); };
   actions.append(start, done);
+  card.style.cursor = "pointer";
+  card.onclick = () => openEditor(t);                         // tap card to edit (its buttons stop propagation)
   return card;
 }
 
@@ -155,8 +157,10 @@ function renderToday(data) {
       </div>`;
     const tick = el("button", "tick", "✓");
     tick.title = "Done";
-    tick.onclick = () => complete(t.raw);
+    tick.onclick = (e) => { e.stopPropagation(); complete(t.raw); };
     row.appendChild(tick);
+    row.style.cursor = "pointer";
+    row.onclick = () => openEditor(t);                        // tap a row to edit (tick stops propagation)
     more.appendChild(row);
   });
 
