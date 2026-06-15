@@ -1293,27 +1293,35 @@ function makeCardDraggable(card, t) {
   });
 }
 function startLaneRename(span, lane) {
-  const head = span.parentElement;
+  const wrap = el("div", "lane-rename");
   const input = el("input", "lane-rename-in");
   input.value = laneLabel(lane);
   const save = el("button", "lane-rename-save", "✓");
   save.title = "Save name";
-  const commit = () => {
-    const v = input.value.trim();
-    const labels = { ...(uiPrefs.laneLabels || {}) };
-    if (v && v !== (LANE_LABEL[lane] || lane)) labels[lane] = v; else delete labels[lane];   // back-to-default clears
-    uiPrefs.laneLabels = labels;
-    saveUiPrefs({ laneLabels: labels });
-    renderBoard();
+  let done = false;
+  const onDoc = (e) => { if (!wrap.contains(e.target)) finish(false); };   // click away → cancel
+  const finish = (saveIt) => {
+    if (done) return;
+    done = true;
+    document.removeEventListener("mousedown", onDoc, true);
+    if (saveIt) {
+      const v = input.value.trim();
+      const labels = { ...(uiPrefs.laneLabels || {}) };
+      if (v && v !== (LANE_LABEL[lane] || lane)) labels[lane] = v; else delete labels[lane];   // back-to-default clears
+      uiPrefs.laneLabels = labels;
+      saveUiPrefs({ laneLabels: labels });
+    }
+    renderBoard();   // re-render with the saved name, or revert on cancel
   };
-  save.onclick = commit;
+  save.onclick = (e) => { e.stopPropagation(); finish(true); };
   input.onkeydown = (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commit(); }
-    else if (e.key === "Escape") renderBoard();
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    else if (e.key === "Escape") { e.preventDefault(); finish(false); }
   };
-  span.replaceWith(input);
-  head.insertBefore(save, head.querySelector(".board-count"));
+  wrap.append(input, save);
+  span.replaceWith(wrap);
   input.focus(); input.select();
+  setTimeout(() => document.addEventListener("mousedown", onDoc, true), 0);
 }
 function renderBoard() {
   const board = $("#board");
