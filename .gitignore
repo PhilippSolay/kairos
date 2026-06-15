@@ -1,0 +1,21 @@
+# ── Secrets ───────────────────────────────────────────────────────────────
+.env
+
+# ── Personal board data (single-user state + history — never in a shared repo)
+KIROS.md
+descriptions.json
+completions.jsonl
+completions.jsonl.seed-bak
+data/
+
+# ── Private workflow config & source filters ─────────────────────────────────
+# .claude/ rituals + sources.md embed real Asana project/section GIDs, the
+# Airtable base id, a contractor's name, and personal failure-mode notes.
+.claude/
+sources.md
+
+# ── Caches / build / OS cruft ────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.gstack/
+.DS_Store

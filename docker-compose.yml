@@ -1,0 +1,32 @@
+# Wired for the solay.cloud VPS (srv1322369): Traefik reverse proxy (traefik-traefik-1)
+# on the external `proxy` network, cert resolver `mytlschallenge` (TLS-ALPN-01).
+# Kairos exposes no host ports — Traefik reaches it over the shared network.
+# App-level HTTP Basic Auth (KIROS_AUTH_* in .env) protects the board.
+name: kairos
+services:
+  kairos:
+    build: .
+    image: kairos:latest
+    container_name: kairos
+    restart: unless-stopped
+    env_file: .env            # KIROS_AUTH_USER / KIROS_AUTH_PASS
+    environment:
+      KIROS_HOST: 0.0.0.0
+      KIROS_PORT: "8765"
+      KIROS_DATA: /data
+      KIROS_NO_OPEN: "1"
+    volumes:
+      - ./data:/data          # KIROS.md + descriptions.json + completions.jsonl persist here
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.kairos.rule=Host(`kairos.solay.cloud`)"
+      - "traefik.http.routers.kairos.entrypoints=websecure"
+      - "traefik.http.routers.kairos.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.kairos.loadbalancer.server.port=8765"
+
+networks:
+  proxy:
+    external: true

@@ -1,0 +1,22 @@
+# Only kiros.py, kiros_web.py and web/ belong in the image.
+.git
+.gitignore
+.claude/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Data is mounted as a volume, never baked into the image
+data/
+KIROS.md
+descriptions.json
+completions.jsonl
+completions.jsonl.seed-bak
+sources.md
+
+# Dev-only
+test_kiros.py
+research/
+*.md
+.env
+.env.example

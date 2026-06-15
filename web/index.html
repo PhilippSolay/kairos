@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#1A1815" />
+  <title>Kiros</title>
+  <!-- iOS home-screen app: launch standalone, dark status bar, white koru on warm-dark icon -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="Kiros" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div class="top-left"><div class="brand"><img class="brand-logo" src="/logo-wt.svg" alt="Kairos" /></div></div>
+      <nav class="tabs" role="tablist">
+        <button class="tab is-active" data-view="board">Board</button>
+        <button class="tab" data-view="matrix">Matrix</button>
+        <button class="tab" data-view="today">Today</button>
+        <button class="tab" data-view="now">Next</button>
+        <button class="tab" data-view="stats">Stats</button>
+      </nav>
+      <div class="top-right">
+        <!-- Per-view filter/sort controls live in the header — only the active view's set shows. -->
+        <div id="top-tools" class="top-tools">
+          <div class="vtools is-active" data-view="board">
+            <div id="bd-company" class="co-toggle" role="group" aria-label="Filter by company"></div>
+            <div id="bd-sort" class="mg-dd">
+              <button type="button" class="mg-select mg-dd-toggle sort-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="Sort by"></button>
+              <div class="mg-dd-menu" role="listbox" hidden></div>
+            </div>
+            <div id="bd-search" class="srch">
+              <button type="button" class="icon-btn srch-btn" aria-label="Search tasks" title="Search">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></svg>
+              </button>
+              <input type="text" class="srch-input" placeholder="Search tasks…" autocomplete="off" aria-label="Search tasks" />
+              <button type="button" class="srch-clear" aria-label="Clear search" title="Clear" tabindex="-1">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="vtools" data-view="matrix">
+            <div id="mx-company" class="co-toggle" role="group" aria-label="Filter by company"></div>
+            <div id="mx-status" class="mg-dd">
+              <button type="button" class="mg-select mg-dd-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter by status">
+                <span class="mg-dd-label">All statuses</span><span class="mg-dd-caret" aria-hidden="true">▾</span>
+              </button>
+              <div class="mg-dd-menu" role="listbox" aria-multiselectable="true" hidden></div>
+            </div>
+          </div>
+          <div class="vtools" data-view="stats">
+            <div class="seg" id="stats-range">
+              <button class="seg-btn" type="button" data-range="day">Day</button>
+              <button class="seg-btn is-active" type="button" data-range="week">Week</button>
+              <button class="seg-btn" type="button" data-range="month">Month</button>
+            </div>
+          </div>
+        </div>
+        <button id="open-structure" class="icon-btn" type="button" title="Companies & Sections" aria-label="Settings">⚙</button>
+        <div id="wip" class="wip" title="Work in progress"></div>
+      </div>
+    </header>
+
+    <!-- TODAY -->
+    <section id="view-today" class="view">
+      <div id="day-effort" class="day-effort"></div>
+      <div id="day-progress" class="day-progress"></div>
+      <div class="cal-actions">
+        <a id="cal-sub" class="cal-btn" href="#">＋ Add today to Calendar</a>
+        <a class="cal-dl" href="/kiros.ics?download=1">download .ics</a>
+      </div>
+      <div id="frog" class="frog"></div>
+      <div id="more" class="more"></div>
+      <p id="hidden-note" class="muted-note"></p>
+    </section>
+
+    <!-- NOW -->
+    <section id="view-now" class="view">
+      <p class="prompt">Stuck? Tell me what you've got, I'll give you one thing.</p>
+      <div class="picker">
+        <div class="picker-row" data-group="energy">
+          <span class="picker-label">Energy</span>
+          <button class="chip" data-energy="low">low</button>
+          <button class="chip" data-energy="med">medium</button>
+          <button class="chip" data-energy="high">high</button>
+        </div>
+        <div class="picker-row" data-group="time">
+          <span class="picker-label">Time</span>
+          <button class="chip" data-time="15">15 min</button>
+          <button class="chip" data-time="30">30 min</button>
+          <button class="chip" data-time="90">90 min</button>
+          <button class="chip is-active" data-time="">any</button>
+        </div>
+      </div>
+      <button id="now-go" class="primary now-go">Give me one thing</button>
+      <div id="now-result" class="now-result"></div>
+    </section>
+
+    <!-- STATS -->
+    <section id="view-stats" class="view">
+      <div class="stats-top">
+        <div class="stat-card"><div class="stat-num" id="st-total">—</div><div class="stat-label">completed</div></div>
+        <div class="stat-card"><div class="stat-num" id="st-streak">—</div><div class="stat-label">day streak</div></div>
+        <div class="stat-card"><div class="stat-num" id="st-effort">—</div><div class="stat-label">hours done</div></div>
+        <div class="stat-card"><div class="stat-num" id="st-avg">—</div><div class="stat-label">per active day</div></div>
+      </div>
+      <div class="panel">
+        <h2>Finished vs. left open</h2>
+        <p class="panel-sub" id="st-best"></p>
+        <div id="st-chart" class="chart-d"></div>
+        <div id="st-legend" class="legend"></div>
+      </div>
+      <div class="stats-two">
+        <div class="panel">
+          <h2>Finished by company</h2>
+          <div id="st-company" class="bars"></div>
+        </div>
+        <div class="panel">
+          <h2>Still open by company</h2>
+          <div id="st-open-company" class="bars"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Open loops</h2>
+        <p class="panel-sub">What's still on your plate — where the weight is.</p>
+        <div id="st-signals" class="signals"></div>
+      </div>
+      <p id="st-note" class="muted-note"></p>
+    </section>
+
+    <!-- MATRIX — 5×5 Eisenhower grid (Importance ↑ × Urgency →); cells filled by renderMatrix -->
+    <section id="view-matrix" class="view">
+      <div class="matrix-wrap">
+        <span class="m-quad m-q-tl">Plan</span>
+        <span class="m-quad m-q-tr">Do now</span>
+        <span class="m-quad m-q-bl">Later</span>
+        <span class="m-quad m-q-br">Quick</span>
+        <div class="matrix" id="matrix"></div>
+      </div>
+    </section>
+
+    <!-- BOARD (kanban by status) -->
+    <section id="view-board" class="view is-active">
+      <div id="board" class="board"></div>
+    </section>
+
+    <!-- MANAGE -->
+    <section id="view-manage" class="view">
+      <div class="mg-toolbar">
+        <input id="mg-search" class="mg-search" type="text" autocomplete="off" placeholder="Search tasks…" />
+        <select id="mg-company" class="mg-select" aria-label="Filter by company"></select>
+        <div id="mg-lane" class="mg-dd">
+          <button type="button" class="mg-select mg-dd-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter by status">
+            <span class="mg-dd-label">All statuses</span><span class="mg-dd-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="mg-dd-menu" role="listbox" aria-multiselectable="true" hidden></div>
+        </div>
+        <div id="mg-sort" class="mg-dd">
+          <button type="button" class="mg-select mg-dd-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="Sort by">
+            <svg class="sort-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="11" y2="12"/><line x1="3" y1="18" x2="7" y2="18"/></svg>
+            <span class="mg-dd-label">Priority</span><span class="mg-dd-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="mg-dd-menu" role="listbox" hidden></div>
+        </div>
+      </div>
+
+      <div id="intake" class="intake"></div>
+
+      <div id="mg-list" class="mg-list"></div>
+    </section>
+
+    <!-- CAPTURE (hidden per request) -->
+    <form id="capture" class="capture" hidden>
+      <input id="capture-input" class="capture-input" type="text" autocomplete="off"
+             placeholder="Something on your mind? Drop it here and forget it." />
+      <button class="capture-btn" type="submit" aria-label="Capture">＋</button>
+    </form>
+  </main>
+
+  <!-- Edit task (centered modal · auto-save) -->
+  <div id="editor" class="modal" hidden>
+    <div class="modal-scrim" data-close></div>
+    <button id="ed-prev" class="ed-nav" type="button" title="Previous task" aria-label="Previous task" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <form id="editor-panel" class="modal-card" autocomplete="off">
+      <span id="ed-saved" class="ed-saved" aria-live="polite"></span>
+      <button id="ed-info" class="ed-info" type="button" title="How to score tasks" aria-label="How to score tasks">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </button>
+      <div class="ed-status-row"><div class="seg seg-status" id="ed-status"></div></div>
+      <div class="ed-row2">
+        <label class="fld"><span>Company</span><select name="company" id="ed-company" class="in"></select></label>
+        <label class="fld"><span>Section</span><select name="front" id="ed-front" class="in"></select></label>
+        <label class="fld"><span>Project</span><input name="group" id="ed-group" class="in" type="text" list="groups" autocomplete="off" placeholder="optional" /></label>
+      </div>
+      <input name="title" class="ed-title" type="text" placeholder="Task name" required />
+      <div class="tg"><span>Deadline</span>
+        <div class="ed-dates" id="ed-dates">
+          <button type="button" class="dchip" data-days="0">Today</button>
+          <button type="button" class="dchip" data-days="1">Tmrw</button>
+          <button type="button" class="dchip" data-days="3">3 Days</button>
+          <button type="button" class="dchip" data-days="7">1 Week</button>
+          <button type="button" class="dchip dchip-date" id="ed-date-btn">Date</button>
+          <input name="due" type="date" class="ed-dateinput" id="ed-dateinput" />
+        </div>
+      </div>
+      <div class="ed-toggles" id="ed-toggles">
+        <div class="tg"><span>Importance</span><div class="seg" data-field="importance" data-kind="num5"></div></div>
+        <div class="tg"><span>Urgency</span><div class="seg" data-field="urgency" data-kind="num5"></div></div>
+        <div class="tg"><span>Effort</span><div class="seg" data-field="est" data-kind="est"></div></div>
+      </div>
+      <input type="hidden" name="energy" />
+      <textarea name="description" class="in ta" rows="3" placeholder="Description / notes"></textarea>
+      <a id="ed-source" class="ed-source" target="_blank" rel="noopener" hidden>Open in Asana ↗</a>
+      <label class="fld" id="ed-delegate-fld"><span>Delegate to</span><input name="delegate" class="in" type="text" list="people" placeholder="nobody" /></label>
+      <input type="hidden" name="url" />
+      <input type="hidden" name="originalRaw" />
+      <input type="hidden" name="added" />
+      <input type="hidden" name="avoid" />
+      <input type="hidden" name="lane" />
+      <div class="ed-foot">
+        <button type="button" id="ed-delete" class="btn-del">Delete</button>
+        <button type="button" id="ed-doit" class="ed-doit">Shit, this needs to get done!</button>
+        <button type="button" id="ed-cal" class="ed-cal" title="Add to Apple Calendar (today, 2am)" aria-label="Add to Apple Calendar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </button>
+        <button type="button" class="primary ed-done-btn" data-close>Close</button>
+      </div>
+
+      <!-- Tips layover — core scoring guidance, toggled by the (i) -->
+      <div id="ed-tips" class="ed-tips">
+        <div class="ed-tips-head">
+          <h3>Scoring, fast</h3>
+          <button type="button" id="ed-tips-x" class="ed-tips-x" aria-label="Close tips">✕</button>
+        </div>
+        <div class="ed-tips-body">
+          <section class="tip">
+            <h4>Importance <em>— cost of <b>never</b> doing it</em></h4>
+            <ul class="tip-scale">
+              <li><b>5</b> revenue / live commitment — <i>rare</i></li>
+              <li><b>4</b> moves a real company goal</li>
+              <li><b>3</b> matters, survives a month — <i>your default</i></li>
+              <li><b>2</b> marginal</li>
+              <li><b>1</b> trivial</li>
+            </ul>
+            <p class="tip-note">Leave blank → inherits the Section default. Set only to override.</p>
+          </section>
+          <section class="tip">
+            <h4>Urgency <em>— cost of doing it <b>later</b></em></h4>
+            <ul class="tip-scale">
+              <li><b>5</b> overdue / blocking someone / window closing</li>
+              <li><b>4</b> due in days</li>
+              <li><b>3</b> this week</li>
+              <li><b>2</b> can wait</li>
+              <li><b>1</b> whenever</li>
+            </ul>
+            <p class="tip-note">The clock &amp; other people — not your stress. Hard date? Put it in Deadline.</p>
+          </section>
+          <section class="tip">
+            <h4>Effort <em>— size of the <b>next action</b></em></h4>
+            <ul class="tip-scale">
+              <li><b>30m–1h</b> a real task</li>
+              <li><b>2h</b> borderline</li>
+              <li><b>4h+</b> that's a project → split, board only the first step</li>
+            </ul>
+            <p class="tip-note">It's the divisor: small + important floats to the top. Don't pad everything to one size.</p>
+          </section>
+          <p class="tip-formula">Score = (Imp×2 + Urg×1.5 + deadline) ÷ Effort. Spread the numbers, or nothing ranks.</p>
+        </div>
+      </div>
+    </form>
+    <button id="ed-next" class="ed-nav" type="button" title="Next task" aria-label="Next task" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></button>
+  </div>
+  <datalist id="people">
+    <option value="Kris"></option><option value="Max"></option>
+    <option value="Argenta"></option><option value="Abigail"></option>
+  </datalist>
+  <datalist id="groups"></datalist>
+
+  <!-- Companies & Projects settings -->
+  <div id="structure" class="editor" hidden>
+    <div class="editor-scrim" data-sclose></div>
+    <div class="editor-panel">
+      <div class="editor-head">
+        <h2>Companies &amp; Sections</h2>
+        <button type="button" class="editor-x" data-sclose aria-label="Close">✕</button>
+      </div>
+      <form id="company-form" class="struct-addco">
+        <input name="coname" class="in" type="text" autocomplete="off" placeholder="New company / context" />
+        <button class="primary" type="submit">Add</button>
+      </form>
+      <div id="struct-list" class="struct-list"></div>
+    </div>
+  </div>
+
+  <button id="fab-new" class="fab" type="button" title="New task" aria-label="New task">+</button>
+
+  <div id="toast" class="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
