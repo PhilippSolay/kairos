@@ -897,7 +897,30 @@ function renderStructure() {
   mg.fronts.forEach((f) => { (groups[f.surface] = groups[f.surface] || []).push(f); });
   Object.keys(groups).forEach((company) => {
     const sec = el("div", "struct-co");
-    sec.appendChild(el("div", "struct-co-name", esc(company)));
+    const cur = (uiPrefs.companyIcons || {})[company];
+    const head = el("div", "struct-co-head");
+    const icoBtn = el("button", "struct-co-ico" + (cur && ICON_PATHS[cur] ? "" : " empty"));
+    icoBtn.type = "button";
+    icoBtn.title = "Choose icon";
+    icoBtn.innerHTML = cur && ICON_PATHS[cur] ? icoSvg(cur) : "+";
+    const picker = el("div", "onb-iconpick struct-iconpick");
+    picker.hidden = true;
+    Object.keys(ICON_PATHS).forEach((k) => {
+      const b = el("button", "onb-ico" + (k === cur ? " on" : ""));
+      b.type = "button"; b.innerHTML = icoSvg(k); b.title = k;
+      b.onclick = () => {
+        const icons = { ...(uiPrefs.companyIcons || {}) };
+        icons[company] = k;
+        uiPrefs.companyIcons = icons;
+        saveUiPrefs({ companyIcons: icons });
+        renderStructure();
+        load().catch(() => {});       // refresh the board's company-filter icons
+      };
+      picker.appendChild(b);
+    });
+    icoBtn.onclick = () => { picker.hidden = !picker.hidden; };
+    head.append(icoBtn, el("span", "struct-co-name", esc(company)));
+    sec.append(head, picker);
     groups[company].forEach((f) => {
       const row = el("div", "struct-proj");
       const nameIn = document.createElement("input");
@@ -1400,7 +1423,7 @@ document.querySelectorAll("#stats-range .seg-btn").forEach((b) => b.onclick = ()
   loadStats().catch((e) => toast("Stats failed: " + e.message));
 });
 
-$("#open-structure").onclick = openStructure;
+$("#account-structure").onclick = openStructure;
 $("#company-form").onsubmit = (e) => { e.preventDefault(); addCompany(e.target.coname.value); e.target.coname.value = ""; };
 document.querySelectorAll("[data-sclose]").forEach((b) => b.onclick = closeStructure);
 

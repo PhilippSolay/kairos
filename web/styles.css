@@ -755,6 +755,15 @@ html[data-theme="light"] {
 .appear-reset:hover { color: var(--text); }
 .appear-reset[hidden] { display: none; }
 
+/* Company icon picker in the Structure panel */
+.struct-co-head { display: flex; align-items: center; gap: 9px; }
+.struct-co-head .struct-co-name { margin: 0; }
+.struct-co-ico { width: 26px; height: 26px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; color: var(--accent); cursor: pointer; padding: 0; }
+.struct-co-ico svg { width: 16px; height: 16px; }
+.struct-co-ico.empty { color: var(--muted); font-size: 17px; line-height: 1; }
+.struct-iconpick { margin: 8px 0 6px; }
+.onb-iconpick[hidden] { display: none; }   /* .onb-iconpick is display:grid, which would beat plain [hidden] */
+
 /* Profile panel */
 .prof-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .prof-field label { font-size: 13px; color: var(--muted); }
