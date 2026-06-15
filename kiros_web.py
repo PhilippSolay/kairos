@@ -765,6 +765,38 @@ class Handler(BaseHTTPRequestHandler):
         save_prefs(uid, {"bgImage": name})
         self._json({"ok": True, "image": name})
 
+    # -- profile --
+    def _profile_name(self, uid: str, body: dict) -> None:
+        name = str(body.get("name", "")).strip()
+        if not name:
+            self._json({"ok": False, "error": "Name can't be empty."}, 400)
+            return
+        STORE.set_name(uid, name)
+        self._json({"ok": True})
+
+    def _profile_password(self, uid: str, body: dict) -> None:
+        user = STORE.get_user(uid)
+        if not user or not auth.verify_password(str(body.get("currentPassword", "")), user["pw_hash"]):
+            self._json({"ok": False, "error": "Current password is wrong."}, 400)
+            return
+        problem = auth.password_problem(str(body.get("newPassword", "")))
+        if problem:
+            self._json({"ok": False, "error": problem}, 400)
+            return
+        STORE.set_password(uid, auth.hash_password(str(body.get("newPassword", ""))))
+        STORE.delete_user_sessions(uid)             # sign out other devices...
+        token = auth.issue_session(STORE, uid)      # ...but keep this session signed in
+        self._json({"ok": True}, cookies=self._auth_cookies(token))
+
+    def _profile_deactivate(self, uid: str, body: dict) -> None:
+        user = STORE.get_user(uid)
+        if not user or not auth.verify_password(str(body.get("password", "")), user["pw_hash"]):
+            self._json({"ok": False, "error": "Password is wrong."}, 400)
+            return
+        STORE.deactivate(uid)                        # soft delete: data kept, login + sessions killed
+        self._json({"ok": True, "redirect": "/login"},
+                   cookies=[clear_cookie(auth.SESSION_COOKIE), clear_cookie(auth.CSRF_COOKIE)])
+
     # -- POST --
     def _rl(self, name: str) -> bool:
         return RATE.allow("%s:%s" % (self._client_ip(), name))
@@ -821,6 +853,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/bg":
             self._bg_upload(uid, body)
+            return
+        if path == "/api/profile/name":
+            self._profile_name(uid, body)
+            return
+        if path == "/api/profile/password":
+            self._profile_password(uid, body)
+            return
+        if path == "/api/profile/deactivate":
+            self._profile_deactivate(uid, body)
             return
 
         # Board mutations: serialized per-user + snapshotted first (see board_guard).

@@ -1536,6 +1536,52 @@ function applyUiPrefs(p) {
   applyBg(uiPrefs.bgImage, uiPrefs.bgOpacity);
   syncAppearanceUI();
 }
+// Profile (name / password / deactivate). Raw fetch so we can surface the server's error text.
+async function profPost(path, data) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Kiros-CSRF": cookie("kiros_csrf") },
+    body: JSON.stringify(data),
+  });
+  const body = await res.json().catch(() => ({}));
+  return { ok: res.ok && !body.error, body };
+}
+function initProfile() {
+  const setMsg = (id, text, ok) => { const m = $(id); if (m) { m.textContent = text; m.classList.toggle("ok", !!ok); } };
+  const openBtn = $("#account-profile");
+  if (openBtn) openBtn.onclick = (e) => {
+    e.stopPropagation();
+    ["#prof-name-msg", "#prof-pw-msg", "#prof-deact-msg"].forEach((i) => setMsg(i, "", false));
+    api("/api/me").then((me) => {
+      if ($("#prof-name")) $("#prof-name").value = me.name || "";
+      if ($("#prof-email")) $("#prof-email").value = me.email || "";
+    }).catch(() => {});
+    $("#profile").hidden = false;
+  };
+  document.querySelectorAll("#profile [data-pclose]").forEach((b) => b.onclick = () => { $("#profile").hidden = true; });
+
+  const nameSave = $("#prof-name-save");
+  if (nameSave) nameSave.onclick = async () => {
+    const r = await profPost("/api/profile/name", { name: $("#prof-name").value });
+    setMsg("#prof-name-msg", r.ok ? "Saved." : (r.body.error || "Could not save."), r.ok);
+  };
+  const pwSave = $("#prof-pw-save");
+  if (pwSave) pwSave.onclick = async () => {
+    const r = await profPost("/api/profile/password", {
+      currentPassword: $("#prof-pw-cur").value, newPassword: $("#prof-pw-new").value });
+    if (r.ok) { $("#prof-pw-cur").value = ""; $("#prof-pw-new").value = ""; }
+    setMsg("#prof-pw-msg", r.ok ? "Password updated." : (r.body.error || "Could not update."), r.ok);
+  };
+  const deactBtn = $("#prof-deact-btn");
+  if (deactBtn) deactBtn.onclick = () => { $("#prof-deact-confirm").hidden = false; deactBtn.hidden = true; };
+  const deactGo = $("#prof-deact-go");
+  if (deactGo) deactGo.onclick = async () => {
+    const r = await profPost("/api/profile/deactivate", { password: $("#prof-deact-pw").value });
+    if (r.ok) location.href = r.body.redirect || "/login";
+    else setMsg("#prof-deact-msg", r.body.error || "Could not deactivate.", false);
+  };
+}
+
 function initAppearance() {
   buildSwatches();
   buildBgColorSwatches();
@@ -1596,6 +1642,7 @@ if (logoutBtn) logoutBtn.onclick = async () => {
 document.addEventListener("click", () => { const m = $("#account-menu"); if (m) m.classList.remove("open"); });
 initAccount();
 initAppearance();
+initProfile();
 
 load().catch((err) => toast("Could not reach Kiros: " + err.message));
 loadManage().catch((err) => toast("Manage failed: " + err.message));  // populates mg (for the FAB/editor on any view)

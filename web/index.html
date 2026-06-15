@@ -90,6 +90,7 @@
           </button>
           <div id="account-menu" class="account-menu" role="menu">
             <div id="account-email" class="account-email"></div>
+            <button id="account-profile" class="account-item" type="button" role="menuitem">Profile</button>
             <button id="account-appearance" class="account-item" type="button" role="menuitem">Appearance</button>
             <a id="account-admin" href="/admin" class="account-item" role="menuitem" hidden>Admin dashboard</a>
             <button id="account-logout" class="account-item" type="button" role="menuitem">Log out</button>
@@ -349,6 +350,43 @@
           <div class="appear-row" id="bg-opacity-row" hidden>
             <span class="appear-meta">Opacity</span>
             <input type="range" id="bg-opacity" min="0" max="70" value="20" />
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile -->
+  <div id="profile" class="editor" hidden>
+    <div class="editor-scrim" data-pclose></div>
+    <div class="editor-panel">
+      <div class="editor-head">
+        <h2>Profile</h2>
+        <button type="button" class="editor-x" data-pclose aria-label="Close">✕</button>
+      </div>
+      <div class="appear">
+        <section>
+          <h3>Account</h3>
+          <div class="prof-field"><label for="prof-name">Name</label><input id="prof-name" type="text" autocomplete="name" /></div>
+          <div class="prof-field"><label for="prof-email">Email</label><input id="prof-email" type="email" disabled /></div>
+          <button type="button" class="primary" id="prof-name-save">Save name</button>
+          <div class="prof-msg" id="prof-name-msg"></div>
+        </section>
+        <section>
+          <h3>Change password</h3>
+          <div class="prof-field"><label for="prof-pw-cur">Current password</label><input id="prof-pw-cur" type="password" autocomplete="current-password" /></div>
+          <div class="prof-field"><label for="prof-pw-new">New password</label><input id="prof-pw-new" type="password" autocomplete="new-password" minlength="8" /></div>
+          <button type="button" class="primary" id="prof-pw-save">Update password</button>
+          <div class="prof-msg" id="prof-pw-msg"></div>
+        </section>
+        <section>
+          <h3>Danger zone</h3>
+          <p class="appear-meta">Deactivating disables your login. Your data is kept, not deleted.</p>
+          <button type="button" class="prof-danger" id="prof-deact-btn">Deactivate account</button>
+          <div id="prof-deact-confirm" hidden>
+            <div class="prof-field"><label for="prof-deact-pw">Confirm with your password</label><input id="prof-deact-pw" type="password" autocomplete="current-password" /></div>
+            <button type="button" class="prof-danger" id="prof-deact-go">Yes, deactivate my account</button>
+            <div class="prof-msg" id="prof-deact-msg"></div>
           </div>
         </section>
       </div>
