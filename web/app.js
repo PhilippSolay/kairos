@@ -1459,18 +1459,23 @@ function saveUiPrefs(patch) {
   uiPrefs = { ...uiPrefs, ...patch };
   return api("/api/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).catch(() => {});
 }
+function isAppearanceCustomized() {
+  const customAccent = uiPrefs.accent && uiPrefs.accent.toLowerCase() !== ACCENTS[0].toLowerCase();
+  return !!(customAccent || uiPrefs.bgColor || uiPrefs.bgImage);
+}
 function syncAppearanceUI() {
+  const activePref = isAppearanceCustomized() ? "custom" : (uiPrefs.theme || "system");
   document.querySelectorAll("#theme-seg button").forEach((b) =>
-    b.classList.toggle("on", b.dataset.themePref === (uiPrefs.theme || "system")));
+    b.classList.toggle("on", b.dataset.themePref === activePref));
   document.querySelectorAll("#accent-swatches .swatch[data-color]").forEach((s) =>
     s.classList.toggle("on", s.dataset.color === (uiPrefs.accent || ACCENTS[0])));
   document.querySelectorAll("#bgcolor-swatches .swatch[data-bgcolor]").forEach((s) =>
     s.classList.toggle("on", s.dataset.bgcolor === uiPrefs.bgColor));
-  const bgcDefault = $("#bgcolor-default"); if (bgcDefault) bgcDefault.hidden = !uiPrefs.bgColor;
   const op = $("#bg-opacity");
   if (op) op.value = String(Math.round((uiPrefs.bgOpacity != null ? uiPrefs.bgOpacity : 0.2) * 100));
   const clear = $("#bg-clear-btn"); if (clear) clear.hidden = !uiPrefs.bgImage;
   const row = $("#bg-opacity-row"); if (row) row.hidden = !uiPrefs.bgImage;
+  const reset = $("#appearance-reset"); if (reset) reset.hidden = !isAppearanceCustomized();
 }
 function buildSwatches() {
   const wrap = $("#accent-swatches");
@@ -1732,10 +1737,24 @@ function initOnboarding() {
 function initAppearance() {
   buildSwatches();
   buildBgColorSwatches();
-  const bgcReset = $("#bgcolor-default");
-  if (bgcReset) bgcReset.onclick = () => { applyBgColor(""); saveUiPrefs({ bgColor: "" }); syncAppearanceUI(); };
+  const reset = $("#appearance-reset");
+  if (reset) reset.onclick = () => {
+    applyAccent(""); applyBgColor("");
+    uiPrefs.bgImage = null; applyBg(null, 0);
+    api("/api/bg", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }) }).catch(() => {});
+    saveUiPrefs({ accent: "", bgColor: "" });
+    syncAppearanceUI();
+  };
   document.querySelectorAll("#theme-seg button").forEach((b) =>
-    b.onclick = () => { applyTheme(b.dataset.themePref); saveUiPrefs({ theme: b.dataset.themePref }); syncAppearanceUI(); });
+    b.onclick = () => {
+      const pref = b.dataset.themePref;
+      if (pref === "custom") return;                            // "Custom" reflects state; it isn't a setting
+      applyTheme(pref);
+      const patch = { theme: pref };
+      if (uiPrefs.bgColor) { applyBgColor(""); patch.bgColor = ""; }   // reveal the preset theme
+      saveUiPrefs(patch);
+      syncAppearanceUI();
+    });
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
     if ((uiPrefs.theme || "system") === "system") applyTheme("system");
   });

@@ -743,12 +743,17 @@ html[data-theme="light"] {
 .swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; transition: transform 0.12s var(--ease); }
 .swatch:hover { transform: scale(1.1); }
 .swatch.on { border-color: var(--text); }
-.swatch-custom { position: relative; overflow: hidden; border: 1px dashed var(--border); background: var(--surface-2); }
+.swatch-custom { position: relative; overflow: hidden; border: 1px dashed var(--border); background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
+.swatch-custom::before { content: "+"; color: var(--muted); font-size: 17px; line-height: 1; }
 .swatch-custom input { position: absolute; inset: -6px; opacity: 0; cursor: pointer; }
 .appear-row { display: flex; align-items: center; gap: 14px; }
 .appear-row input[type=range] { flex: 1; accent-color: var(--accent); }
 .appear-link { background: none; border: 0; color: var(--accent); font-family: inherit; font-size: 14px; cursor: pointer; padding: 0; }
 .appear-meta { font-size: 13px; color: var(--muted); }
+.appear-row[hidden] { display: none; }   /* .appear-row sets display:flex, which would beat plain [hidden] */
+.appear-reset { width: 100%; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-family: inherit; font-size: 14px; padding: 10px; border-radius: 10px; cursor: pointer; margin-top: 2px; }
+.appear-reset:hover { color: var(--text); }
+.appear-reset[hidden] { display: none; }
 
 /* Profile panel */
 .prof-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
