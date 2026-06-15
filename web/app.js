@@ -194,8 +194,37 @@ function fillSelect(sel, pairs, current) {
 // --- Company filter: icon toggle (Board + Matrix) --------------------------
 // Companies with a shipped icon in /icons. Others fall back to a text label.
 const COMPANY_ICONS = new Set(["all", "atmosa", "personal", "studiosolay", "trueself"]);
+// Symbol library for company/context icons (Feather-style; inherit currentColor).
+const ICON_PATHS = {
+  briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>',
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+  heart: '<path d="M20.8 5.6a5 5 0 0 0-7.1 0L12 7.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 21l8.8-8.3a5 5 0 0 0 0-7.1z"/>',
+  star: '<polygon points="12 2 15 9 22 9.3 16.5 14 18.5 21 12 17 5.5 21 7.5 14 2 9.3 9 9"/>',
+  zap: '<polygon points="13 2 4 14 11 14 10 22 20 9 13 9 13 2"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  coffee: '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1.5" x2="6" y2="4.5"/><line x1="10" y1="1.5" x2="10" y2="4.5"/><line x1="14" y1="1.5" x2="14" y2="4.5"/>',
+  code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  box: '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/>',
+  bag: '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
+  target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  sun: '<circle cx="12" cy="12" r="4.5"/><line x1="12" y1="1.5" x2="12" y2="3.5"/><line x1="12" y1="20.5" x2="12" y2="22.5"/><line x1="4" y1="4" x2="5.5" y2="5.5"/><line x1="18.5" y1="18.5" x2="20" y2="20"/><line x1="1.5" y1="12" x2="3.5" y2="12"/><line x1="20.5" y1="12" x2="22.5" y2="12"/><line x1="4" y1="20" x2="5.5" y2="18.5"/><line x1="18.5" y1="5.5" x2="20" y2="4"/>',
+  leaf: '<path d="M11 20A7 7 0 0 1 4 13C4 7 9 4 20 3c-1 11-4 16-9 17z"/><path d="M4 21c4-6 8-9 13-10"/>',
+  compass: '<circle cx="12" cy="12" r="10"/><polygon points="16.2 7.8 14 14 7.8 16.2 10 10 16.2 7.8"/>',
+  feather: '<path d="M20.2 3.8a5.5 5.5 0 0 0-7.8 0L3 13.2V21h7.8l9.4-9.4a5.5 5.5 0 0 0 0-7.8z"/><line x1="16" y1="8" x2="2" y2="22"/>',
+};
+function icoSvg(key) {
+  const p = ICON_PATHS[key];
+  return p ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>` : "";
+}
 function companySlug(name) { return (name || "").toLowerCase().replace(/[^a-z0-9]+/g, ""); }
 function companyGlyph(slug, label) {
+  const chosen = (uiPrefs.companyIcons || {})[label];     // user-chosen icon wins
+  if (chosen && ICON_PATHS[chosen]) return `<span class="co-ico">${icoSvg(chosen)}</span>`;
   return COMPANY_ICONS.has(slug)
     ? `<img src="/icons/icon_company_${slug}.svg" alt="${esc(label)}" draggable="false" />`
     : `<span class="co-text">${esc(label)}</span>`;
@@ -1399,7 +1428,7 @@ $("#capture").onsubmit = (e) => {
 
 // --- Appearance: theme / accent / background image -------------------------
 const ACCENTS = ["#D97757", "#E0A458", "#8AAE7F", "#6C8EBF", "#9B7EBD", "#C97B91"];
-let uiPrefs = { theme: "system", accent: "", bgColor: "", bgImage: null, bgOpacity: 0.2 };
+let uiPrefs = { theme: "system", accent: "", bgColor: "", bgImage: null, bgOpacity: 0.2, companyIcons: {} };
 
 function resolveTheme(pref) {
   return pref === "system"
@@ -1582,6 +1611,125 @@ function initProfile() {
   };
 }
 
+// --- Onboarding (first run) -------------------------------------------------
+let onbStep = 0;
+let onbCompanies = [];          // [{ name, icon }] added during onboarding
+let onbPickedIcon = "briefcase";
+const ONB_STEPS = ["welcome", "companies", "appearance", "learn"];
+
+function showOnboarding() {
+  const m = $("#onboarding");
+  if (!m) return;
+  onbStep = 0; onbCompanies = []; onbPickedIcon = "briefcase";
+  m.hidden = false;
+  renderOnbStep();
+}
+function finishOnboarding() {
+  const icons = { ...(uiPrefs.companyIcons || {}) };
+  onbCompanies.forEach((c) => { icons[c.name] = c.icon; });
+  uiPrefs.companyIcons = icons;
+  const m = $("#onboarding"); if (m) m.hidden = true;
+  // Full reload so the board + company filter rebuild with the new contexts and icons.
+  saveUiPrefs({ onboarded: true, companyIcons: icons }).then(() => location.reload());
+}
+function onbNext() {
+  if (onbStep >= ONB_STEPS.length - 1) { finishOnboarding(); return; }
+  onbStep++; renderOnbStep();
+}
+function renderOnbStep() {
+  const dots = $("#onb-steps");
+  if (dots) dots.innerHTML = ONB_STEPS.map((_, i) => `<i class="${i === onbStep ? "on" : ""}"></i>`).join("");
+  const next = $("#onb-next"); if (next) next.textContent = onbStep === ONB_STEPS.length - 1 ? "Get started" : "Next";
+  const skip = $("#onb-skip"); if (skip) skip.style.visibility = onbStep === ONB_STEPS.length - 1 ? "hidden" : "visible";
+  const body = $("#onb-body");
+  if (body) { body.innerHTML = ""; body.appendChild(ONB_RENDER[ONB_STEPS[onbStep]]()); }
+}
+const ONB_RENDER = {
+  welcome() {
+    return el("div", "onb-step",
+      `<img class="onb-logo" src="/logo-wt.svg" alt="" />
+       <h1>Welcome to Kiros</h1>
+       <p class="onb-lead">A calm filter for the few things that matter — not another endless list. Let's set yours up in under a minute.</p>`);
+  },
+  companies() {
+    const wrap = el("div", "onb-step");
+    wrap.innerHTML =
+      `<h1>Your contexts</h1>
+       <p class="onb-lead">Add the areas of your life or work, and pick an icon for each.</p>
+       <div class="onb-iconpick" id="onb-iconpick"></div>
+       <div class="onb-addrow">
+         <input id="onb-co-name" type="text" placeholder="e.g. Work, Side project, Home" autocomplete="off" />
+         <button type="button" class="primary" id="onb-co-add">Add</button>
+       </div>
+       <div class="onb-colist" id="onb-colist"></div>`;
+    const pick = wrap.querySelector("#onb-iconpick");
+    Object.keys(ICON_PATHS).forEach((k) => {
+      const b = el("button", "onb-ico" + (k === onbPickedIcon ? " on" : ""));
+      b.type = "button"; b.innerHTML = icoSvg(k); b.title = k;
+      b.onclick = () => { onbPickedIcon = k; pick.querySelectorAll(".onb-ico").forEach((x) => x.classList.remove("on")); b.classList.add("on"); };
+      pick.appendChild(b);
+    });
+    const list = wrap.querySelector("#onb-colist");
+    const renderList = () => {
+      list.innerHTML = onbCompanies.map((c, i) =>
+        `<span class="onb-cochip"><span class="co-ico">${icoSvg(c.icon)}</span>${esc(c.name)}<button type="button" data-i="${i}" aria-label="Remove">✕</button></span>`).join("");
+      list.querySelectorAll("button[data-i]").forEach((b) => b.onclick = () => { onbCompanies.splice(Number(b.dataset.i), 1); renderList(); });
+    };
+    const add = () => {
+      const inp = wrap.querySelector("#onb-co-name");
+      const name = inp.value.trim();
+      if (name && !onbCompanies.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+        onbCompanies.push({ name, icon: onbPickedIcon });
+        api("/api/company/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).catch(() => {});
+        renderList();
+      }
+      inp.value = ""; inp.focus();
+    };
+    wrap.querySelector("#onb-co-add").onclick = add;
+    wrap.querySelector("#onb-co-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+    return wrap;
+  },
+  appearance() {
+    const wrap = el("div", "onb-step");
+    wrap.innerHTML =
+      `<h1>Make it yours</h1>
+       <p class="onb-lead">Pick a theme and accent — change them anytime under Appearance.</p>
+       <div class="appear-seg onb-themeseg">
+         <button type="button" data-t="system">System</button>
+         <button type="button" data-t="light">Light</button>
+         <button type="button" data-t="dark">Dark</button>
+       </div>
+       <div class="swatches onb-accents"></div>`;
+    const seg = wrap.querySelector(".onb-themeseg");
+    const syncSeg = () => seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.t === (uiPrefs.theme || "system")));
+    seg.querySelectorAll("button").forEach((b) => b.onclick = () => { applyTheme(b.dataset.t); saveUiPrefs({ theme: b.dataset.t }); syncSeg(); });
+    syncSeg();
+    const accents = wrap.querySelector(".onb-accents");
+    ACCENTS.forEach((c) => {
+      const b = el("button", "swatch" + ((uiPrefs.accent || ACCENTS[0]) === c ? " on" : ""));
+      b.type = "button"; b.style.background = c;
+      b.onclick = () => { applyAccent(c); saveUiPrefs({ accent: c }); accents.querySelectorAll(".swatch").forEach((x) => x.classList.remove("on")); b.classList.add("on"); };
+      accents.appendChild(b);
+    });
+    return wrap;
+  },
+  learn() {
+    return el("div", "onb-step",
+      `<h1>How priority works</h1>
+       <p class="onb-lead">Kiros ranks for you from three levers — spread the numbers, or nothing ranks.</p>
+       <div class="onb-levers">
+         <div><b>Importance</b><span>1–5 · does this move something that matters?</span></div>
+         <div><b>Urgency</b><span>1–5 · the clock &amp; other people — not your stress.</span></div>
+         <div><b>Effort</b><span>30m–8h · the size of the next action. Small + important floats up.</span></div>
+       </div>
+       <p class="onb-formula">Score = (Imp×2 + Urg×1.5 + deadline) ÷ Effort</p>`);
+  },
+};
+function initOnboarding() {
+  const next = $("#onb-next"); if (next) next.onclick = onbNext;
+  const skip = $("#onb-skip"); if (skip) skip.onclick = finishOnboarding;
+}
+
 function initAppearance() {
   buildSwatches();
   buildBgColorSwatches();
@@ -1616,7 +1764,7 @@ function initAppearance() {
     op.oninput = (e) => { uiPrefs.bgOpacity = Number(e.target.value) / 100; applyBg(uiPrefs.bgImage, uiPrefs.bgOpacity); };
     op.onchange = (e) => saveUiPrefs({ bgOpacity: Number(e.target.value) / 100 });
   }
-  api("/api/prefs").then(applyUiPrefs).catch(() => {});
+  api("/api/prefs").then((p) => { applyUiPrefs(p); if (!uiPrefs.onboarded) showOnboarding(); }).catch(() => {});
 }
 
 // Account menu + per-user calendar feed (needs this user's private ics token).
@@ -1643,6 +1791,7 @@ document.addEventListener("click", () => { const m = $("#account-menu"); if (m) 
 initAccount();
 initAppearance();
 initProfile();
+initOnboarding();
 
 load().catch((err) => toast("Could not reach Kiros: " + err.message));
 loadManage().catch((err) => toast("Manage failed: " + err.message));  // populates mg (for the FAB/editor on any view)

@@ -765,3 +765,47 @@ html[data-theme="light"] {
 .prof-danger { background: transparent; border: 1px solid var(--over); color: var(--over); font-family: inherit; font-size: 14px; padding: 9px 14px; border-radius: 10px; cursor: pointer; }
 .prof-danger:hover { background: var(--over); color: #fff; }
 #prof-deact-confirm { margin-top: 14px; }
+
+/* Company icon in the filter toggles */
+.co-ico { display: inline-flex; align-items: center; justify-content: center; }
+.co-ico svg { width: 20px; height: 20px; }
+
+/* Onboarding */
+.onb { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(6px); padding: 20px; }
+.onb[hidden] { display: none; }
+.onb-card { width: 100%; max-width: 440px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 30px 28px 22px; box-shadow: var(--shadow); }
+.onb-steps { display: flex; gap: 6px; justify-content: center; margin-bottom: 22px; }
+.onb-steps i { width: 7px; height: 7px; border-radius: 50%; background: var(--surface-2); transition: background 0.2s var(--ease); }
+.onb-steps i.on { background: var(--accent); }
+.onb-body { min-height: 286px; }
+.onb-step { text-align: center; }
+.onb-step h1 { font-family: var(--display); font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+.onb-lead { color: var(--muted); font-size: 15px; margin: 0 auto 20px; line-height: 1.5; max-width: 340px; }
+.onb-logo { width: 54px; height: 54px; margin: 6px auto 18px; display: block; filter: var(--logo-filter); }
+.onb-iconpick { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 16px; }
+.onb-ico { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 10px; color: var(--muted); cursor: pointer; padding: 0; transition: all 0.12s var(--ease); }
+.onb-ico svg { width: 18px; height: 18px; }
+.onb-ico:hover { color: var(--text); }
+.onb-ico.on { border-color: var(--accent); color: var(--accent); }
+.onb-addrow { display: flex; gap: 8px; margin-bottom: 14px; }
+.onb-addrow input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 15px; }
+.onb-addrow input:focus { outline: none; border-color: var(--accent); }
+.onb-colist { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.onb-cochip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px 5px 11px; font-size: 14px; }
+.onb-cochip .co-ico svg { width: 15px; height: 15px; }
+.onb-cochip button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 2px; }
+.onb-themeseg { margin: 0 auto 18px; width: fit-content; }
+.onb-accents { justify-content: center; margin-bottom: 8px; }
+.onb-levers { text-align: left; display: flex; flex-direction: column; gap: 14px; margin: 0 auto 18px; max-width: 360px; }
+.onb-levers > div { display: flex; flex-direction: column; }
+.onb-levers b { font-size: 15px; }
+.onb-levers span { color: var(--muted); font-size: 13.5px; }
+.onb-formula { text-align: center; color: var(--faint); font-size: 13px; font-family: var(--serif); }
+.onb-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+.onb-skip { background: none; border: 0; color: var(--muted); font-family: inherit; font-size: 14px; cursor: pointer; }
+.onb-nav .primary { min-width: 124px; }
