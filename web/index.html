@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="dark light" />
   <meta name="theme-color" content="#1A1815" />
   <title>Kiros</title>
   <!-- iOS home-screen app: launch standalone, dark status bar, white koru on warm-dark icon -->
@@ -17,8 +17,23 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap" />
   <link rel="stylesheet" href="/styles.css" />
+  <script>
+    // Apply cached appearance before paint to avoid a flash; server prefs reconcile on load.
+    (function () {
+      try {
+        var pref = localStorage.getItem("kiros-theme") || "system";
+        var resolved = pref === "system"
+          ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+          : pref;
+        document.documentElement.dataset.theme = resolved;
+        var accent = localStorage.getItem("kiros-accent");
+        if (accent) document.documentElement.style.setProperty("--accent", accent);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
+  <div id="bg-layer"></div>
   <main class="shell">
     <header class="top">
       <div class="top-left"><div class="brand"><img class="brand-logo" src="/logo-wt.svg" alt="Kairos" /></div></div>
@@ -73,6 +88,7 @@
           </button>
           <div id="account-menu" class="account-menu" role="menu">
             <div id="account-email" class="account-email"></div>
+            <button id="account-appearance" class="account-item" type="button" role="menuitem">Appearance</button>
             <a id="account-admin" href="/admin" class="account-item" role="menuitem" hidden>Admin dashboard</a>
             <button id="account-logout" class="account-item" type="button" role="menuitem">Log out</button>
           </div>
@@ -294,6 +310,43 @@
     <option value="Argenta"></option><option value="Abigail"></option>
   </datalist>
   <datalist id="groups"></datalist>
+
+  <!-- Appearance settings -->
+  <div id="appearance" class="editor" hidden>
+    <div class="editor-scrim" data-aclose></div>
+    <div class="editor-panel">
+      <div class="editor-head">
+        <h2>Appearance</h2>
+        <button type="button" class="editor-x" data-aclose aria-label="Close">✕</button>
+      </div>
+      <div class="appear">
+        <section>
+          <h3>Theme</h3>
+          <div class="appear-seg" id="theme-seg">
+            <button type="button" data-theme-pref="system">System</button>
+            <button type="button" data-theme-pref="light">Light</button>
+            <button type="button" data-theme-pref="dark">Dark</button>
+          </div>
+        </section>
+        <section>
+          <h3>Accent color</h3>
+          <div class="swatches" id="accent-swatches"></div>
+        </section>
+        <section>
+          <h3>Background image</h3>
+          <div class="appear-row">
+            <button type="button" class="appear-link" id="bg-upload-btn">Upload image</button>
+            <button type="button" class="appear-link" id="bg-clear-btn" hidden>Remove</button>
+            <input type="file" id="bg-file" accept="image/*" hidden />
+          </div>
+          <div class="appear-row" id="bg-opacity-row" hidden>
+            <span class="appear-meta">Opacity</span>
+            <input type="range" id="bg-opacity" min="0" max="70" value="20" />
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <!-- Companies & Projects settings -->
   <div id="structure" class="editor" hidden>

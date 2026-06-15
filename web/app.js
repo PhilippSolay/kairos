@@ -1397,6 +1397,120 @@ $("#capture").onsubmit = (e) => {
   capture(text);
 };
 
+// --- Appearance: theme / accent / background image -------------------------
+const ACCENTS = ["#D97757", "#E0A458", "#8AAE7F", "#6C8EBF", "#9B7EBD", "#C97B91"];
+let uiPrefs = { theme: "system", accent: "", bgImage: null, bgOpacity: 0.2 };
+
+function resolveTheme(pref) {
+  return pref === "system"
+    ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : pref;
+}
+function applyTheme(pref) {
+  document.documentElement.dataset.theme = resolveTheme(pref);
+  try { localStorage.setItem("kiros-theme", pref); } catch (e) {}
+}
+function applyAccent(color) {
+  const root = document.documentElement.style;
+  if (color) root.setProperty("--accent", color); else root.removeProperty("--accent");
+  try { color ? localStorage.setItem("kiros-accent", color) : localStorage.removeItem("kiros-accent"); } catch (e) {}
+}
+function applyBg(image, opacity) {
+  const layer = $("#bg-layer");
+  if (!layer) return;
+  if (image) {
+    layer.style.backgroundImage = `url(/api/bg?t=${Date.now()})`;
+    layer.style.opacity = String(opacity != null ? opacity : 0.2);
+  } else {
+    layer.style.backgroundImage = "";
+    layer.style.opacity = "0";
+  }
+}
+function saveUiPrefs(patch) {
+  uiPrefs = { ...uiPrefs, ...patch };
+  return api("/api/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).catch(() => {});
+}
+function syncAppearanceUI() {
+  document.querySelectorAll("#theme-seg button").forEach((b) =>
+    b.classList.toggle("on", b.dataset.themePref === (uiPrefs.theme || "system")));
+  document.querySelectorAll("#accent-swatches .swatch[data-color]").forEach((s) =>
+    s.classList.toggle("on", s.dataset.color === (uiPrefs.accent || ACCENTS[0])));
+  const op = $("#bg-opacity");
+  if (op) op.value = String(Math.round((uiPrefs.bgOpacity != null ? uiPrefs.bgOpacity : 0.2) * 100));
+  const clear = $("#bg-clear-btn"); if (clear) clear.hidden = !uiPrefs.bgImage;
+  const row = $("#bg-opacity-row"); if (row) row.hidden = !uiPrefs.bgImage;
+}
+function buildSwatches() {
+  const wrap = $("#accent-swatches");
+  if (!wrap || wrap.childElementCount) return;
+  ACCENTS.forEach((c) => {
+    const b = el("button", "swatch");
+    b.type = "button"; b.dataset.color = c; b.style.background = c; b.title = c;
+    b.onclick = () => { applyAccent(c); saveUiPrefs({ accent: c }); syncAppearanceUI(); };
+    wrap.appendChild(b);
+  });
+  const custom = el("button", "swatch swatch-custom");
+  custom.type = "button"; custom.title = "Custom color";
+  const inp = el("input"); inp.type = "color"; inp.value = uiPrefs.accent || ACCENTS[0];
+  inp.oninput = () => applyAccent(inp.value);
+  inp.onchange = () => { saveUiPrefs({ accent: inp.value }); syncAppearanceUI(); };
+  custom.appendChild(inp); wrap.appendChild(custom);
+}
+function resizeImage(file, maxDim, cb) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    const canvas = el("canvas"); canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    cb(canvas.toDataURL("image/jpeg", 0.82));
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); cb(null); };
+  img.src = url;
+}
+function applyUiPrefs(p) {
+  uiPrefs = { ...uiPrefs, ...(p || {}) };
+  applyTheme(uiPrefs.theme || "system");
+  applyAccent(uiPrefs.accent || "");
+  applyBg(uiPrefs.bgImage, uiPrefs.bgOpacity);
+  syncAppearanceUI();
+}
+function initAppearance() {
+  buildSwatches();
+  document.querySelectorAll("#theme-seg button").forEach((b) =>
+    b.onclick = () => { applyTheme(b.dataset.themePref); saveUiPrefs({ theme: b.dataset.themePref }); syncAppearanceUI(); });
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+    if ((uiPrefs.theme || "system") === "system") applyTheme("system");
+  });
+  const open = $("#account-appearance");
+  if (open) open.onclick = (e) => { e.stopPropagation(); $("#appearance").hidden = false; };
+  document.querySelectorAll("#appearance [data-aclose]").forEach((b) =>
+    b.onclick = () => { $("#appearance").hidden = true; });
+  const up = $("#bg-upload-btn"), file = $("#bg-file"), clear = $("#bg-clear-btn"), op = $("#bg-opacity");
+  if (up && file) up.onclick = () => file.click();
+  if (file) file.onchange = (e) => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    resizeImage(f, 1600, (dataUrl) => {
+      if (!dataUrl) return toast("Could not read that image.");
+      api("/api/bg", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }) })
+        .then((r) => { if (r && r.image) { uiPrefs.bgImage = r.image; applyBg(r.image, uiPrefs.bgOpacity); syncAppearanceUI(); } })
+        .catch(() => toast("Upload failed."));
+    });
+  };
+  if (clear) clear.onclick = () => {
+    api("/api/bg", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }) }).catch(() => {});
+    uiPrefs.bgImage = null; applyBg(null, 0); syncAppearanceUI();
+  };
+  if (op) {
+    op.oninput = (e) => { uiPrefs.bgOpacity = Number(e.target.value) / 100; applyBg(uiPrefs.bgImage, uiPrefs.bgOpacity); };
+    op.onchange = (e) => saveUiPrefs({ bgOpacity: Number(e.target.value) / 100 });
+  }
+  api("/api/prefs").then(applyUiPrefs).catch(() => {});
+}
+
 // Account menu + per-user calendar feed (needs this user's private ics token).
 async function initAccount() {
   let me;
@@ -1419,6 +1533,7 @@ if (logoutBtn) logoutBtn.onclick = async () => {
 };
 document.addEventListener("click", () => { const m = $("#account-menu"); if (m) m.classList.remove("open"); });
 initAccount();
+initAppearance();
 
 load().catch((err) => toast("Could not reach Kiros: " + err.message));
 loadManage().catch((err) => toast("Manage failed: " + err.message));  // populates mg (for the FAB/editor on any view)

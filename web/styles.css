@@ -15,6 +15,7 @@
   --over: #C9534A;            /* over-capacity warning — the one place red is allowed */
   --border: rgba(236, 234, 227, 0.09);
   --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.78);
+  --glow: #211E1A;             /* warm radial glow behind the page (themed) */
   --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
   --display: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
@@ -26,7 +27,7 @@
 
 body {
   background:
-    radial-gradient(1200px 600px at 50% -10%, #211E1A 0%, var(--bg) 60%);
+    radial-gradient(1200px 600px at 50% -10%, var(--glow) 0%, var(--bg) 60%);
   color: var(--text);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
@@ -702,3 +703,51 @@ button.ghost.danger:hover { border-color: var(--circle); }
   cursor: pointer; text-decoration: none; display: block;
 }
 .account-item:hover { background: var(--surface-2); }
+
+/* ── Theming ─────────────────────────────────────────────────────────────── */
+/* Light palette — calm warm-light, same clay family. JS resolves "system" → light/dark. */
+html[data-theme="light"] {
+  --bg: #F6F3EC;
+  --surface: #FFFFFF;
+  --surface-2: #EFE9DF;
+  --text: #2A2622;
+  --muted: #6F685D;
+  --faint: #ABA395;
+  --accent: #C7613D;
+  --accent-hover: #B5522F;
+  --accent-soft: rgba(199, 97, 61, 0.12);
+  --done: #5E8A52;
+  --circle: #A9743F;
+  --over: #C0473D;
+  --border: rgba(40, 34, 28, 0.13);
+  --shadow: 0 18px 50px -24px rgba(60, 45, 30, 0.26);
+  --glow: #FFFFFF;
+}
+/* The white koru mark needs darkening on light backgrounds. */
+html[data-theme="light"] .brand-logo { filter: brightness(0); opacity: 0.7; }
+
+/* Per-user background image, behind everything. */
+#bg-layer {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 0.4s var(--ease);
+}
+
+/* Appearance panel */
+.appear-card { max-width: 420px; }
+.appear { display: flex; flex-direction: column; gap: 22px; margin-top: 8px; }
+.appear section { display: flex; flex-direction: column; gap: 10px; }
+.appear h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+.appear-seg { display: inline-flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 4px; }
+.appear-seg button { flex: 1; background: transparent; border: 0; color: var(--muted); font-family: inherit; font-size: 14px; padding: 8px 14px; border-radius: 999px; cursor: pointer; transition: all 0.15s var(--ease); }
+.appear-seg button.on { background: var(--accent); color: #1a1209; }
+.swatches { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; transition: transform 0.12s var(--ease); }
+.swatch:hover { transform: scale(1.1); }
+.swatch.on { border-color: var(--text); }
+.swatch-custom { position: relative; overflow: hidden; border: 1px dashed var(--border); background: var(--surface-2); }
+.swatch-custom input { position: absolute; inset: -6px; opacity: 0; cursor: pointer; }
+.appear-row { display: flex; align-items: center; gap: 14px; }
+.appear-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.appear-link { background: none; border: 0; color: var(--accent); font-family: inherit; font-size: 14px; cursor: pointer; padding: 0; }
+.appear-meta { font-size: 13px; color: var(--muted); }

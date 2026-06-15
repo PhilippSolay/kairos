@@ -11,11 +11,13 @@ No build step, stdlib only:
 """
 from __future__ import annotations
 
+import base64
 import contextlib
 import dataclasses
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import threading
@@ -501,7 +503,9 @@ def ics_for(board, today, descs: dict, comps: list) -> str:
 
 
 # --- Per-user UI prefs (theme etc.) ------------------------------------------
-DEFAULT_PREFS = {"theme": "system", "accent": "", "bg": None, "onboarded": False}
+DEFAULT_PREFS = {"theme": "system", "accent": "", "bgImage": None, "bgOpacity": 0.2, "onboarded": False}
+BG_MAX_BYTES = 4 * 1024 * 1024
+_BG_DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,(.+)$", re.DOTALL)
 
 
 def load_prefs(uid: str) -> dict:
@@ -513,7 +517,7 @@ def load_prefs(uid: str) -> dict:
 
 def save_prefs(uid: str, data: dict) -> None:
     cur = load_prefs(uid)
-    for k in ("theme", "accent", "bg", "onboarded"):
+    for k in ("theme", "accent", "bgImage", "bgOpacity", "onboarded"):
         if k in data:
             cur[k] = data[k]
     user_dir(uid).mkdir(parents=True, exist_ok=True)
@@ -670,6 +674,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(stats_payload(read_completions(done_file(uid)), self._board(uid), date.today(), rng))
         elif path == "/api/prefs":
             self._json(load_prefs(uid))
+        elif path == "/api/bg":
+            self._serve_bg(uid)
         elif path == "/api/admin/users":
             if not user["is_admin"]:
                 self._json({"error": "forbidden"}, 403)
@@ -717,6 +723,47 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+    _BG_CTYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                  ".webp": "image/webp", ".gif": "image/gif"}
+
+    def _serve_bg(self, uid: str) -> None:
+        name = load_prefs(uid).get("bgImage")
+        target = (user_dir(uid) / name) if name else None
+        if not target or not target.is_file():
+            self._send(404, b"no background", "text/plain")
+            return
+        self._send(200, target.read_bytes(), self._BG_CTYPES.get(target.suffix.lower(), "image/jpeg"))
+
+    def _bg_upload(self, uid: str, body: dict) -> None:
+        if body.get("clear"):
+            prev = load_prefs(uid).get("bgImage")
+            if prev:
+                try:
+                    (user_dir(uid) / prev).unlink()
+                except OSError:
+                    pass
+            save_prefs(uid, {"bgImage": None})
+            self._json({"ok": True, "image": None})
+            return
+        m = _BG_DATA_URL.match(str(body.get("dataUrl", "")))
+        if not m:
+            self._json({"ok": False, "error": "invalid image"}, 400)
+            return
+        ext = "jpg" if m.group(1) in ("jpeg", "jpg") else m.group(1)
+        try:
+            raw = base64.b64decode(m.group(2), validate=True)
+        except (ValueError, TypeError):
+            self._json({"ok": False, "error": "invalid image"}, 400)
+            return
+        if len(raw) > BG_MAX_BYTES:
+            self._json({"ok": False, "error": "image too large"}, 413)
+            return
+        ensure_user_data(uid)
+        name = "bg." + ext
+        (user_dir(uid) / name).write_bytes(raw)
+        save_prefs(uid, {"bgImage": name})
+        self._json({"ok": True, "image": name})
 
     # -- POST --
     def _rl(self, name: str) -> bool:
@@ -771,6 +818,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/prefs":
             save_prefs(uid, body if isinstance(body, dict) else {})
             self._json({"ok": True})
+            return
+        if path == "/api/bg":
+            self._bg_upload(uid, body)
             return
 
         # Board mutations: serialized per-user + snapshotted first (see board_guard).
