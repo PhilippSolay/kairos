@@ -50,7 +50,7 @@ body.wide .shell { padding-bottom: 20px; }   /* Matrix has no FAB — reclaim th
 .top-left { flex: 0 0 auto; display: flex; align-items: center; }
 .brand { display: flex; align-items: center; }
 .brand-logo { width: 30px; height: 30px; display: block; flex: 0 0 auto; }
-.top-right { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-start; gap: 14px; flex-wrap: wrap; }
+.top-right { flex: 1 1 auto; display: flex; align-items: center; justify-content: flex-start; gap: 14px; flex-wrap: wrap; }
 /* Per-view filter/sort controls; only the active view's set is shown */
 .top-tools { display: flex; align-items: center; gap: 10px; }
 .vtools { display: none; align-items: center; gap: 10px; }
@@ -687,7 +687,7 @@ button.ghost.danger:hover { border-color: var(--circle); }
 }
 
 /* Account menu (top-right) */
-.account { position: relative; }
+.account { position: relative; margin-left: auto; }
 .account-menu {
   position: absolute; right: 0; top: 42px; min-width: 184px; background: var(--surface);
   border: 1px solid var(--border); border-radius: 12px; padding: 8px;
