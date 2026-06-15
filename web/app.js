@@ -31,15 +31,6 @@ async function api(path, opts) {
 let nowChoice = { energy: null, time: "" };
 
 // --- Rendering --------------------------------------------------------------
-function renderWip(wip) {
-  const box = $("#wip");
-  box.className = "wip" + (wip.ok ? "" : " over");
-  box.innerHTML = "";
-  for (let i = 0; i < wip.cap; i++) {
-    box.appendChild(el("i", i < wip.active ? "on" : ""));
-  }
-}
-
 function circleChip(t) {
   if (!t.avoidance || t.avoidance <= 0.3) return "";
   const days = t.ageDays != null ? `${t.ageDays} days` : "a while";
@@ -839,7 +830,6 @@ function renderBars(boxSel, rows, fill) {
 // --- Actions ----------------------------------------------------------------
 async function load() {
   const data = await api("/api/board");
-  renderWip(data.wip);
   renderToday(data);
 }
 

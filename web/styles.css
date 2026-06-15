@@ -56,10 +56,6 @@ body.wide .shell { padding-bottom: 20px; }   /* Matrix has no FAB — reclaim th
 .vtools { display: none; align-items: center; gap: 10px; }
 .vtools.is-active { display: inline-flex; }
 .date { color: var(--muted); font-size: 13px; }
-.wip { display: flex; gap: 5px; }
-.wip i { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); display: block; }
-.wip i.on { background: var(--accent); }
-.wip.over i.on { background: var(--circle); }
 
 /* Tabs */
 .tabs {
@@ -655,7 +651,6 @@ button.ghost.danger:hover { border-color: var(--circle); }
   .co-btn img { width: 16px; height: 16px; }
   .sort-toggle { padding: 7px 9px; }
   .icon-btn { width: 30px; height: 30px; }
-  .wip { display: none; }   /* WIP meter is desktop-only */
 
   /* Toolbar */
   .mg-search { min-width: 0; }
@@ -792,6 +787,9 @@ html[data-theme="light"] {
 /* Company icon in the filter toggles */
 .co-ico { display: inline-flex; align-items: center; justify-content: center; }
 .co-ico svg { width: 20px; height: 20px; }
+.co-btn .co-ico { color: var(--accent); opacity: 0.55; transition: opacity 0.18s var(--ease); }
+.co-btn:hover .co-ico { opacity: 0.85; }
+.co-btn.is-active .co-ico { opacity: 1; }
 
 /* Onboarding */
 .onb { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
