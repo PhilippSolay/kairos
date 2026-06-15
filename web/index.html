@@ -28,6 +28,8 @@
         document.documentElement.dataset.theme = resolved;
         var accent = localStorage.getItem("kiros-accent");
         if (accent) document.documentElement.style.setProperty("--accent", accent);
+        var bv = localStorage.getItem("kiros-bgvars");
+        if (bv) { var o = JSON.parse(bv); for (var k in o) document.documentElement.style.setProperty(k, o[k]); }
       } catch (e) {}
     })();
   </script>
@@ -331,6 +333,11 @@
         <section>
           <h3>Accent color</h3>
           <div class="swatches" id="accent-swatches"></div>
+        </section>
+        <section>
+          <h3>Background color</h3>
+          <div class="swatches" id="bgcolor-swatches"></div>
+          <button type="button" class="appear-link" id="bgcolor-default" hidden>Reset to theme default</button>
         </section>
         <section>
           <h3>Background image</h3>

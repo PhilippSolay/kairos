@@ -16,6 +16,7 @@
   --border: rgba(236, 234, 227, 0.09);
   --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.78);
   --glow: #211E1A;             /* warm radial glow behind the page (themed) */
+  --logo-filter: none;         /* darkens the white koru mark on light backgrounds */
   --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
   --display: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
@@ -722,9 +723,10 @@ html[data-theme="light"] {
   --border: rgba(40, 34, 28, 0.13);
   --shadow: 0 18px 50px -24px rgba(60, 45, 30, 0.26);
   --glow: #FFFFFF;
+  --logo-filter: brightness(0) opacity(0.7);
 }
-/* The white koru mark needs darkening on light backgrounds. */
-html[data-theme="light"] .brand-logo { filter: brightness(0); opacity: 0.7; }
+/* The white koru mark darkens on any light background (light theme OR a light bg color). */
+.brand-logo { filter: var(--logo-filter); }
 
 /* Per-user background image, behind everything. */
 #bg-layer {

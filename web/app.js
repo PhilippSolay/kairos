@@ -1399,7 +1399,7 @@ $("#capture").onsubmit = (e) => {
 
 // --- Appearance: theme / accent / background image -------------------------
 const ACCENTS = ["#D97757", "#E0A458", "#8AAE7F", "#6C8EBF", "#9B7EBD", "#C97B91"];
-let uiPrefs = { theme: "system", accent: "", bgImage: null, bgOpacity: 0.2 };
+let uiPrefs = { theme: "system", accent: "", bgColor: "", bgImage: null, bgOpacity: 0.2 };
 
 function resolveTheme(pref) {
   return pref === "system"
@@ -1435,6 +1435,9 @@ function syncAppearanceUI() {
     b.classList.toggle("on", b.dataset.themePref === (uiPrefs.theme || "system")));
   document.querySelectorAll("#accent-swatches .swatch[data-color]").forEach((s) =>
     s.classList.toggle("on", s.dataset.color === (uiPrefs.accent || ACCENTS[0])));
+  document.querySelectorAll("#bgcolor-swatches .swatch[data-bgcolor]").forEach((s) =>
+    s.classList.toggle("on", s.dataset.bgcolor === uiPrefs.bgColor));
+  const bgcDefault = $("#bgcolor-default"); if (bgcDefault) bgcDefault.hidden = !uiPrefs.bgColor;
   const op = $("#bg-opacity");
   if (op) op.value = String(Math.round((uiPrefs.bgOpacity != null ? uiPrefs.bgOpacity : 0.2) * 100));
   const clear = $("#bg-clear-btn"); if (clear) clear.hidden = !uiPrefs.bgImage;
@@ -1456,6 +1459,61 @@ function buildSwatches() {
   inp.onchange = () => { saveUiPrefs({ accent: inp.value }); syncAppearanceUI(); };
   custom.appendChild(inp); wrap.appendChild(custom);
 }
+
+// Background color → derive a cohesive, readable palette from one color.
+const BG_COLORS = ["#1A1815", "#14161B", "#211A15", "#1C1620", "#F6F3EC", "#ECE7DC", "#E9EEF2"];
+const BGVARS = ["--bg", "--glow", "--surface", "--surface-2", "--text", "--muted", "--border", "--logo-filter"];
+function hexToRgb(hex) {
+  hex = String(hex || "").replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  const n = parseInt(hex || "0", 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function relLum([r, g, b]) { return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; }
+function mixHex(hex, target, t) {
+  const a = hexToRgb(hex), b = hexToRgb(target);
+  return "#" + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, "0")).join("");
+}
+function bgColorVars(color) {
+  const light = relLum(hexToRgb(color)) > 0.55;   // light bg → dark text, and vice versa
+  return {
+    "--bg": color,
+    "--glow": mixHex(color, "#ffffff", 0.04),
+    "--surface": mixHex(color, "#ffffff", light ? 0.5 : 0.06),
+    "--surface-2": mixHex(color, light ? "#000000" : "#ffffff", light ? 0.05 : 0.13),
+    "--text": light ? "#1c1a17" : "#ECEAE3",
+    "--muted": light ? "rgba(28,26,23,0.62)" : "rgba(236,234,227,0.6)",
+    "--border": light ? "rgba(28,26,23,0.13)" : "rgba(236,234,227,0.1)",
+    "--logo-filter": light ? "brightness(0) opacity(0.7)" : "none",
+  };
+}
+function applyBgColor(color) {
+  const root = document.documentElement.style;
+  if (!color) {
+    BGVARS.forEach((p) => root.removeProperty(p));
+    try { localStorage.removeItem("kiros-bgcolor"); localStorage.removeItem("kiros-bgvars"); } catch (e) {}
+  } else {
+    const vars = bgColorVars(color);
+    Object.keys(vars).forEach((k) => root.setProperty(k, vars[k]));
+    try { localStorage.setItem("kiros-bgcolor", color); localStorage.setItem("kiros-bgvars", JSON.stringify(vars)); } catch (e) {}
+  }
+}
+function buildBgColorSwatches() {
+  const wrap = $("#bgcolor-swatches");
+  if (!wrap || wrap.childElementCount) return;
+  BG_COLORS.forEach((c) => {
+    const b = el("button", "swatch");
+    b.type = "button"; b.dataset.bgcolor = c; b.style.background = c; b.title = c;
+    b.onclick = () => { applyBgColor(c); saveUiPrefs({ bgColor: c }); syncAppearanceUI(); };
+    wrap.appendChild(b);
+  });
+  const custom = el("button", "swatch swatch-custom");
+  custom.type = "button"; custom.title = "Custom background color";
+  const inp = el("input"); inp.type = "color"; inp.value = uiPrefs.bgColor || BG_COLORS[0];
+  inp.oninput = () => applyBgColor(inp.value);
+  inp.onchange = () => { applyBgColor(inp.value); saveUiPrefs({ bgColor: inp.value }); syncAppearanceUI(); };
+  custom.appendChild(inp); wrap.appendChild(custom);
+}
 function resizeImage(file, maxDim, cb) {
   const img = new Image();
   const url = URL.createObjectURL(file);
@@ -1474,11 +1532,15 @@ function applyUiPrefs(p) {
   uiPrefs = { ...uiPrefs, ...(p || {}) };
   applyTheme(uiPrefs.theme || "system");
   applyAccent(uiPrefs.accent || "");
+  applyBgColor(uiPrefs.bgColor || "");
   applyBg(uiPrefs.bgImage, uiPrefs.bgOpacity);
   syncAppearanceUI();
 }
 function initAppearance() {
   buildSwatches();
+  buildBgColorSwatches();
+  const bgcReset = $("#bgcolor-default");
+  if (bgcReset) bgcReset.onclick = () => { applyBgColor(""); saveUiPrefs({ bgColor: "" }); syncAppearanceUI(); };
   document.querySelectorAll("#theme-seg button").forEach((b) =>
     b.onclick = () => { applyTheme(b.dataset.themePref); saveUiPrefs({ theme: b.dataset.themePref }); syncAppearanceUI(); });
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
