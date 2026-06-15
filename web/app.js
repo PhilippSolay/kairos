@@ -1578,8 +1578,7 @@ async function profPost(path, data) {
 function initProfile() {
   const setMsg = (id, text, ok) => { const m = $(id); if (m) { m.textContent = text; m.classList.toggle("ok", !!ok); } };
   const openBtn = $("#account-profile");
-  if (openBtn) openBtn.onclick = (e) => {
-    e.stopPropagation();
+  if (openBtn) openBtn.onclick = () => {
     ["#prof-name-msg", "#prof-pw-msg", "#prof-deact-msg"].forEach((i) => setMsg(i, "", false));
     api("/api/me").then((me) => {
       if ($("#prof-name")) $("#prof-name").value = me.name || "";
@@ -1741,7 +1740,7 @@ function initAppearance() {
     if ((uiPrefs.theme || "system") === "system") applyTheme("system");
   });
   const open = $("#account-appearance");
-  if (open) open.onclick = (e) => { e.stopPropagation(); $("#appearance").hidden = false; };
+  if (open) open.onclick = () => { $("#appearance").hidden = false; };   // let the click bubble so the menu closes
   document.querySelectorAll("#appearance [data-aclose]").forEach((b) =>
     b.onclick = () => { $("#appearance").hidden = true; });
   const up = $("#bg-upload-btn"), file = $("#bg-file"), clear = $("#bg-clear-btn"), op = $("#bg-opacity");
@@ -1771,8 +1770,6 @@ function initAppearance() {
 async function initAccount() {
   let me;
   try { me = await api("/api/me"); } catch (e) { return; }
-  const emailEl = $("#account-email");
-  if (emailEl) emailEl.textContent = me.email || "";
   const adminLink = $("#account-admin");
   if (adminLink) adminLink.hidden = !me.isAdmin;
   const calSub = $("#cal-sub");
