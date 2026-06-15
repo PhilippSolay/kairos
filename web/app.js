@@ -915,12 +915,21 @@ function renderStructure() {
         uiPrefs.companyIcons = icons;
         saveUiPrefs({ companyIcons: icons });
         renderStructure();
-        load().catch(() => {});       // refresh the board's company-filter icons
+        refreshCompanyToggles();      // show the new icon in the nav
       };
       picker.appendChild(b);
     });
     icoBtn.onclick = () => { picker.hidden = !picker.hidden; };
-    head.append(icoBtn, el("span", "struct-co-name", esc(company)));
+    const nameIn = document.createElement("input");
+    nameIn.className = "struct-co-name-in";
+    nameIn.value = company;
+    nameIn.title = "Rename company";
+    nameIn.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); nameIn.blur(); } };
+    nameIn.onchange = () => { const v = nameIn.value.trim(); if (v && v !== company) renameCompany(company, v); else nameIn.value = company; };
+    const coDel = el("button", "struct-co-del", "×");
+    coDel.type = "button"; coDel.title = "Remove company";
+    coDel.onclick = () => removeCompany(company);
+    head.append(icoBtn, nameIn, coDel);
     sec.append(head, picker);
     groups[company].forEach((f) => {
       const row = el("div", "struct-proj");
@@ -962,6 +971,7 @@ async function structurePost(path, payload, msg) {
   toast(msg);
   await loadManage();   // refresh companies, fronts, table, edit dropdown
   renderStructure();
+  refreshCompanyToggles();   // reflect company add/rename/delete in the nav filters
 }
 
 function addCompany(name) {
@@ -974,6 +984,21 @@ function deleteProject(code, name) {
   if (confirm(`Delete section "${name}"? Its tasks keep their code but lose their section mapping.`)) {
     structurePost("/api/project/delete", { code }, "Section removed.");
   }
+}
+function renameCompany(oldName, newName) {
+  const icons = { ...(uiPrefs.companyIcons || {}) };
+  if (icons[oldName]) { icons[newName] = icons[oldName]; delete icons[oldName]; uiPrefs.companyIcons = icons; saveUiPrefs({ companyIcons: icons }); }
+  structurePost("/api/company/rename", { old: oldName, new: newName }, "Company renamed.");
+}
+function removeCompany(name) {
+  if (!confirm(`Remove company "${name}"? Its sections are removed; tasks keep their code but lose the section mapping.`)) return;
+  const icons = { ...(uiPrefs.companyIcons || {}) };
+  if (icons[name]) { delete icons[name]; uiPrefs.companyIcons = icons; saveUiPrefs({ companyIcons: icons }); }
+  structurePost("/api/company/delete", { name }, "Company removed.");
+}
+function refreshCompanyToggles() {
+  buildCompanyToggle("#bd-company", boardFilter, renderBoard);
+  buildCompanyToggle("#mx-company", matrixFilter, renderMatrix);
 }
 
 // --- Matrix (projects on Importance × Urgency) -----------------------------

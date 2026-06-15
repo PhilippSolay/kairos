@@ -11,7 +11,7 @@ from kiros import (DEFAULT_WEIGHTS, Board, Front, Task, add_capture, add_company
                    add_front, add_task_line, avoidance_boost, deadline_pressure,
                    energy_match, fill_day_plan, focusable, format_task_line, parse_board,
                    parse_task, rank, remove_front, remove_line, score_task, toggle_task_done,
-                   update_front)
+                   update_front, rename_company, remove_company)
 
 TODAY = date(2026, 6, 6)
 W = dict(DEFAULT_WEIGHTS)
@@ -317,6 +317,26 @@ class Structure(unittest.TestCase):
         p = self._tmp()
         self.assertTrue(remove_front(p, "AT-BIZ"))
         self.assertNotIn("AT-BIZ", parse_board(Path(p).read_text(encoding="utf-8")).fronts)
+
+    def test_rename_company(self):
+        p = self._tmp()
+        self.assertTrue(rename_company(p, "Atmosa", "Atmosa Labs"))
+        b = parse_board(Path(p).read_text(encoding="utf-8"))
+        self.assertIn("Atmosa Labs", b.companies)
+        self.assertNotIn("Atmosa", b.companies)
+        self.assertEqual(b.fronts["AT-BIZ"].surface, "Atmosa Labs")   # fronts follow the rename
+
+    def test_rename_company_noop(self):
+        self.assertFalse(rename_company(self._tmp(), "Atmosa", "Atmosa"))
+        self.assertFalse(rename_company(self._tmp(), "Missing", "X"))
+
+    def test_remove_company(self):
+        p = self._tmp()
+        self.assertTrue(remove_company(p, "Atmosa"))
+        b = parse_board(Path(p).read_text(encoding="utf-8"))
+        self.assertNotIn("Atmosa", b.companies)
+        self.assertNotIn("AT-BIZ", b.fronts)        # its fronts are removed too
+        self.assertIn("Private", b.companies)       # other companies untouched
 
     def test_parse_front_urgency(self):
         b = parse_board("## 🎯 Fronts\n- [X] P · importance:4 · urgency:2 · surface:Atmosa\n")

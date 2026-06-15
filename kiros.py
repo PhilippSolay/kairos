@@ -584,6 +584,65 @@ def update_front(path: str, code: str, importance=None, urgency=None, name=None)
     return changed
 
 
+def rename_company(path: str, old: str, new: str) -> bool:
+    """Rename a company everywhere: its registry entry, its '### {surface}' front group,
+    and every front's surface. Returns False on blank input or a no-op rename."""
+    old, new = old.strip(), new.strip()
+    if not old or not new or old == new:
+        return False
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    out, bucket, changed = [], None, False
+    for ln in lines:
+        stripped = ln.strip()
+        if ln.startswith("## "):
+            bucket = "companies" if ("compan" in ln.lower() and "front" not in ln.lower()) else None
+        if bucket == "companies" and stripped.startswith("- ") and stripped[2:].strip() == old:
+            out.append(f"- {new}")
+            changed = True
+            continue
+        if stripped == f"### {old}":
+            out.append(f"### {new}")
+            changed = True
+            continue
+        front = parse_front(stripped)
+        if front and front.surface == old:
+            out.append(format_front_line(front.code, front.name, new, front.importance, front.urgency))
+            changed = True
+            continue
+        out.append(ln)
+    if changed:
+        Path(path).write_text("\n".join(out) + "\n", encoding="utf-8")
+    return changed
+
+
+def remove_company(path: str, name: str) -> bool:
+    """Remove a company: its registry entry, its '### {surface}' heading, and every front
+    under it. Tasks keep their code but lose the section mapping. False if name is blank."""
+    name = name.strip()
+    if not name:
+        return False
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    out, bucket, changed = [], None, False
+    for ln in lines:
+        stripped = ln.strip()
+        if ln.startswith("## "):
+            bucket = "companies" if ("compan" in ln.lower() and "front" not in ln.lower()) else None
+        if bucket == "companies" and stripped.startswith("- ") and stripped[2:].strip() == name:
+            changed = True
+            continue
+        if stripped == f"### {name}":
+            changed = True
+            continue
+        front = parse_front(stripped)
+        if front and front.surface == name:
+            changed = True
+            continue
+        out.append(ln)
+    if changed:
+        Path(path).write_text("\n".join(out) + "\n", encoding="utf-8")
+    return changed
+
+
 def toggle_task_done(path: str, raw: str, done: bool = True) -> bool:
     """Flip a task line's checkbox by exact raw-line match. Returns True if it changed."""
     target = raw.strip()

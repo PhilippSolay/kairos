@@ -878,6 +878,10 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/company/save":
                 name = str(body.get("name", "")).strip()
                 self._json({"ok": bool(name) and kiros.add_company(bp, name)})
+            elif path == "/api/company/rename":
+                self._json({"ok": kiros.rename_company(bp, str(body.get("old", "")), str(body.get("new", "")))})
+            elif path == "/api/company/delete":
+                self._json({"ok": kiros.remove_company(bp, str(body.get("name", "")))})
             elif path == "/api/project/save":
                 self._project_save(uid, bp, body)
             elif path == "/api/project/delete":
