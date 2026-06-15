@@ -683,3 +683,22 @@ button.ghost.danger:hover { border-color: var(--circle); }
   /* Matrix fits shorter screens */
   .matrix { height: calc(100vh - 230px); min-height: 360px; }
 }
+
+/* Account menu (top-right) */
+.account { position: relative; }
+.account-menu {
+  position: absolute; right: 0; top: 42px; min-width: 184px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 12px; padding: 8px;
+  box-shadow: var(--shadow); display: none; flex-direction: column; gap: 2px; z-index: 60;
+}
+.account-menu.open { display: flex; }
+.account-email {
+  font-size: 12.5px; color: var(--muted); padding: 6px 10px;
+  border-bottom: 1px solid var(--border); margin-bottom: 4px; word-break: break-all;
+}
+.account-item {
+  background: transparent; border: 0; text-align: left; color: var(--text);
+  font-family: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px;
+  cursor: pointer; text-decoration: none; display: block;
+}
+.account-item:hover { background: var(--surface-2); }

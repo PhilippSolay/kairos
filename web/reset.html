@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set new password · Kiros</title>
+  <link rel="icon" href="/logo.png">
+  <link rel="stylesheet" href="/auth.css">
+</head>
+<body>
+  <main class="auth-card">
+    <img class="auth-logo" src="/logo-wt.svg" alt="Kiros">
+    <h1>Set a new password</h1>
+    <p class="auth-sub">Choose something you'll remember.</p>
+    <form data-auth="reset" data-endpoint="/api/auth/reset">
+      <div class="fld">
+        <label for="password">New password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password"
+               minlength="8" required>
+      </div>
+      <button type="submit">Update password</button>
+      <div class="err" id="err"></div>
+    </form>
+    <p class="auth-alt"><a href="/login">Back to sign in</a></p>
+  </main>
+  <script src="/auth.js"></script>
+</body>
+</html>

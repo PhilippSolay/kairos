@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create account · Kiros</title>
+  <link rel="icon" href="/logo.png">
+  <link rel="stylesheet" href="/auth.css">
+</head>
+<body>
+  <main class="auth-card">
+    <img class="auth-logo" src="/logo-wt.svg" alt="Kiros">
+    <h1>Create your board</h1>
+    <p class="auth-sub">A calm place for the few things that matter.</p>
+    <form data-auth="signup" data-endpoint="/api/auth/signup">
+      <div class="fld">
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" autocomplete="name" required>
+      </div>
+      <div class="fld">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="fld">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password"
+               minlength="8" required>
+      </div>
+      <button type="submit">Create account</button>
+      <div class="err" id="err"></div>
+    </form>
+    <p class="auth-alt">Already have an account? <a href="/login">Sign in</a></p>
+  </main>
+  <script src="/auth.js"></script>
+</body>
+</html>

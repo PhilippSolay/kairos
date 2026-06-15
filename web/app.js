@@ -12,8 +12,18 @@ const el = (tag, cls, html) => {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+function cookie(name) {
+  const m = document.cookie.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]+)"));
+  return m ? decodeURIComponent(m[1]) : "";
+}
 async function api(path, opts) {
+  opts = opts || {};
+  if (opts.method && opts.method.toUpperCase() === "POST") {
+    // Double-submit CSRF: echo the kiros_csrf cookie in a header the server checks.
+    opts.headers = Object.assign({ "X-Kiros-CSRF": cookie("kiros_csrf") }, opts.headers || {});
+  }
   const res = await fetch(path, opts);
+  if (res.status === 401) { location.href = "/login"; throw new Error("auth required"); }
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json();
 }
@@ -1383,8 +1393,26 @@ $("#capture").onsubmit = (e) => {
   capture(text);
 };
 
-const calSub = $("#cal-sub");
-if (calSub) calSub.href = "webcal://" + location.host + "/kiros.ics";
+// Account menu + per-user calendar feed (needs this user's private ics token).
+async function initAccount() {
+  let me;
+  try { me = await api("/api/me"); } catch (e) { return; }
+  const emailEl = $("#account-email");
+  if (emailEl) emailEl.textContent = me.email || "";
+  const adminLink = $("#account-admin");
+  if (adminLink) adminLink.hidden = !me.isAdmin;
+  const calSub = $("#cal-sub");
+  if (calSub && me.icsToken) calSub.href = "webcal://" + location.host + "/u/" + me.icsToken + "/kiros.ics";
+}
+const accountBtn = $("#account-btn");
+if (accountBtn) accountBtn.onclick = (e) => { e.stopPropagation(); $("#account-menu").classList.toggle("open"); };
+const logoutBtn = $("#account-logout");
+if (logoutBtn) logoutBtn.onclick = async () => {
+  try { await api("/api/auth/logout", { method: "POST" }); } catch (e) { /* fall through to login */ }
+  location.href = "/login";
+};
+document.addEventListener("click", () => { const m = $("#account-menu"); if (m) m.classList.remove("open"); });
+initAccount();
 
 load().catch((err) => toast("Could not reach Kiros: " + err.message));
 loadManage().catch((err) => toast("Manage failed: " + err.message));  // populates mg (for the FAB/editor on any view)
