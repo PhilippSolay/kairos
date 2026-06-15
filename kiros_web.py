@@ -504,7 +504,7 @@ def ics_for(board, today, descs: dict, comps: list) -> str:
 
 # --- Per-user UI prefs (theme etc.) ------------------------------------------
 DEFAULT_PREFS = {"theme": "system", "accent": "", "bgColor": "", "bgImage": None, "bgOpacity": 0.2,
-                 "companyIcons": {}, "onboarded": False}
+                 "companyIcons": {}, "laneLabels": {}, "onboarded": False}
 BG_MAX_BYTES = 4 * 1024 * 1024
 _BG_DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,(.+)$", re.DOTALL)
 
@@ -518,7 +518,7 @@ def load_prefs(uid: str) -> dict:
 
 def save_prefs(uid: str, data: dict) -> None:
     cur = load_prefs(uid)
-    for k in ("theme", "accent", "bgColor", "bgImage", "bgOpacity", "companyIcons", "onboarded"):
+    for k in ("theme", "accent", "bgColor", "bgImage", "bgOpacity", "companyIcons", "laneLabels", "onboarded"):
         if k in data:
             cur[k] = data[k]
     user_dir(uid).mkdir(parents=True, exist_ok=True)

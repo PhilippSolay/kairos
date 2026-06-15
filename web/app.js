@@ -172,6 +172,7 @@ function renderToday(data) {
 
 // --- Manage (the dense workhorse) ------------------------------------------
 const LANE_LABEL = { inbox: "Inbox", active: "Active", today: "Today", delegated: "Delegated", parking: "Parked", done: "Done" };
+function laneLabel(lane) { return (uiPrefs.laneLabels && uiPrefs.laneLabels[lane]) || LANE_LABEL[lane] || lane; }
 let mg = { tasks: [], fronts: [], companies: [], lanes: [], inbox: [], date: "" };
 const mgFilter = { q: "", company: "", lanes: new Set(), sort: "score", dir: -1 };
 let edRows = [];   // the list the editor's ◂ ▸ step through — set per view (table / board / matrix)
@@ -255,7 +256,7 @@ function buildCompanyToggle(sel, state, onChange) {
 // --- Status filter: multi-select checkbox dropdown --------------------------
 function buildLaneMenu() {
   const menu = $("#mg-lane .mg-dd-menu");
-  const opts = [["", "All statuses"], ...mg.lanes.filter((l) => l !== "delegated").map((l) => [l, LANE_LABEL[l] || l])];
+  const opts = [["", "All statuses"], ...mg.lanes.filter((l) => l !== "delegated").map((l) => [l, laneLabel(l)])];
   menu.innerHTML = opts.map(([val, label]) => {
     const checked = val === "" ? mgFilter.lanes.size === 0 : mgFilter.lanes.has(val);
     return `<button type="button" class="mg-dd-opt${checked ? " on" : ""}" role="option" aria-selected="${checked}" data-val="${esc(val)}"><span class="mg-check" aria-hidden="true"></span><span>${esc(label)}</span></button>`;
@@ -272,7 +273,7 @@ function toggleLane(val) {
 function updateLaneLabel() {
   const n = mgFilter.lanes.size;
   const text = n === 0 ? "All statuses"
-    : n === 1 ? (LANE_LABEL[[...mgFilter.lanes][0]] || [...mgFilter.lanes][0])
+    : n === 1 ? (laneLabel([...mgFilter.lanes][0]))
     : `${n} statuses`;
   $("#mg-lane .mg-dd-label").textContent = text;
 }
@@ -396,7 +397,7 @@ function cardBody(t, showStatus) {
   const link = t.url ? ` <a class="t-link" href="${esc(t.url)}" target="_blank" rel="noopener" title="Open source ↗" onclick="event.stopPropagation()">↗</a>` : "";
   const proj = t.group ? `<span class="t-proj">${esc(t.group)}</span><span class="t-sep">|</span>` : "";
   const due = t.due ? `<span class="t-due ${overdue}">${esc(relativeDue(t.due, mg.date))}</span>` : "";
-  const status = showStatus ? `<span class="lane lane-${t.lane}">${LANE_LABEL[t.lane] || t.lane}</span>` : "";
+  const status = showStatus ? `<span class="lane lane-${t.lane}">${esc(laneLabel(t.lane))}</span>` : "";
   return `
     <div class="t-main">
       ${crumbs ? `<div class="t-crumbs">${crumbs}</div>` : ""}
@@ -987,7 +988,7 @@ async function loadMatrix() {
 // Matrix status filter — same multi-select checkbox dropdown as Manage (excludes delegated/done)
 function buildMxStatusMenu() {
   const menu = $("#mx-status .mg-dd-menu");
-  const opts = [["", "All statuses"], ...mg.lanes.filter((l) => l !== "delegated" && l !== "done").map((l) => [l, LANE_LABEL[l] || l])];
+  const opts = [["", "All statuses"], ...mg.lanes.filter((l) => l !== "delegated" && l !== "done").map((l) => [l, laneLabel(l)])];
   menu.innerHTML = opts.map(([val, label]) => {
     const checked = val === "" ? matrixFilter.lanes.size === 0 : matrixFilter.lanes.has(val);
     return `<button type="button" class="mg-dd-opt${checked ? " on" : ""}" role="option" aria-selected="${checked}" data-val="${esc(val)}"><span class="mg-check" aria-hidden="true"></span><span>${esc(label)}</span></button>`;
@@ -1004,7 +1005,7 @@ function toggleMxStatus(val) {
 function updateMxStatusLabel() {
   const n = matrixFilter.lanes.size;
   $("#mx-status .mg-dd-label").textContent = n === 0 ? "All statuses"
-    : n === 1 ? (LANE_LABEL[[...matrixFilter.lanes][0]] || [...matrixFilter.lanes][0]) : `${n} statuses`;
+    : n === 1 ? (laneLabel([...matrixFilter.lanes][0])) : `${n} statuses`;
 }
 const MX_IMP_ROWS = [5, 4, 3, 2, 1];   // top → bottom
 const MX_URG_COLS = [1, 2, 3, 4, 5];   // left → right
@@ -1190,7 +1191,7 @@ async function moveTask(t, targetLane) {
       await api("/api/task/save", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fields, lane: targetLane, originalRaw: t.raw, moved: true }) });
     }
-    toast("Moved to " + (LANE_LABEL[targetLane] || targetLane) + ".");
+    toast("Moved to " + laneLabel(targetLane) + ".");
     loadBoard();
     load();
   } catch (err) {
@@ -1266,6 +1267,29 @@ function makeCardDraggable(card, t) {
     document.addEventListener("pointercancel", cancel);
   });
 }
+function startLaneRename(span, lane) {
+  const head = span.parentElement;
+  const input = el("input", "lane-rename-in");
+  input.value = laneLabel(lane);
+  const save = el("button", "lane-rename-save", "✓");
+  save.title = "Save name";
+  const commit = () => {
+    const v = input.value.trim();
+    const labels = { ...(uiPrefs.laneLabels || {}) };
+    if (v && v !== (LANE_LABEL[lane] || lane)) labels[lane] = v; else delete labels[lane];   // back-to-default clears
+    uiPrefs.laneLabels = labels;
+    saveUiPrefs({ laneLabels: labels });
+    renderBoard();
+  };
+  save.onclick = commit;
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    else if (e.key === "Escape") renderBoard();
+  };
+  span.replaceWith(input);
+  head.insertBefore(save, head.querySelector(".board-count"));
+  input.focus(); input.select();
+}
 function renderBoard() {
   const board = $("#board");
   board.innerHTML = "";
@@ -1287,7 +1311,10 @@ function renderBoard() {
       ? tasks.filter((t) => t.done)
       : tasks.filter((t) => t.lane === lane && !t.done)).sort(cmp);
     const head = el("div", "board-head");
-    head.innerHTML = `<span class="lane lane-${lane}">${LANE_LABEL[lane] || lane}</span><span class="board-count">${items.length}</span>`;
+    const labelSpan = el("span", `lane lane-${lane}`, esc(laneLabel(lane)));
+    labelSpan.title = "Click to rename";
+    labelSpan.onclick = () => startLaneRename(labelSpan, lane);
+    head.append(labelSpan, el("span", "board-count", String(items.length)));
     col.appendChild(head);
     const body = el("div", "board-col-body");
     if (!items.length) body.appendChild(el("div", "board-empty", "—"));
@@ -1451,7 +1478,7 @@ $("#capture").onsubmit = (e) => {
 
 // --- Appearance: theme / accent / background image -------------------------
 const ACCENTS = ["#D97757", "#E0A458", "#8AAE7F", "#6C8EBF", "#9B7EBD", "#C97B91"];
-let uiPrefs = { theme: "system", accent: "", bgColor: "", bgImage: null, bgOpacity: 0.2, companyIcons: {} };
+let uiPrefs = { theme: "system", accent: "", bgColor: "", bgImage: null, bgOpacity: 0.2, companyIcons: {}, laneLabels: {} };
 
 function resolveTheme(pref) {
   return pref === "system"

@@ -764,6 +764,11 @@ html[data-theme="light"] {
 .struct-iconpick { margin: 8px 0 6px; }
 .onb-iconpick[hidden] { display: none; }   /* .onb-iconpick is display:grid, which would beat plain [hidden] */
 
+/* Board column (lane) rename */
+.lane-rename-in { font-family: var(--display); font-size: 21px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--accent); border-radius: 7px; color: var(--text); padding: 0 8px; width: 150px; max-width: 52vw; }
+.lane-rename-in:focus { outline: none; }
+.lane-rename-save { flex: 0 0 auto; background: var(--accent); color: #1a1209; border: 0; border-radius: 7px; width: 26px; height: 26px; cursor: pointer; font-size: 14px; margin-left: 6px; }
+
 /* Profile panel */
 .prof-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .prof-field label { font-size: 13px; color: var(--muted); }
