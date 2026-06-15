@@ -1403,6 +1403,8 @@ async function initAccount() {
   if (adminLink) adminLink.hidden = !me.isAdmin;
   const calSub = $("#cal-sub");
   if (calSub && me.icsToken) calSub.href = "webcal://" + location.host + "/u/" + me.icsToken + "/kiros.ics";
+  const calDl = document.querySelector(".cal-dl");
+  if (calDl && me.icsToken) calDl.href = "/u/" + me.icsToken + "/kiros.ics?download=1";
 }
 const accountBtn = $("#account-btn");
 if (accountBtn) accountBtn.onclick = (e) => { e.stopPropagation(); $("#account-menu").classList.toggle("open"); };

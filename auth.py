@@ -15,7 +15,7 @@ import time
 
 # --- tunables ---------------------------------------------------------------
 MIN_PASSWORD = 8
-SCRYPT_N, SCRYPT_R, SCRYPT_P = 16384, 8, 1          # ~16 MB, interactive-fast
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 32768, 8, 1          # OWASP 2024 interactive (N=2^15)
 SCRYPT_MAXMEM = 64 * 1024 * 1024
 
 SESSION_COOKIE = "kiros_session"
@@ -43,6 +43,11 @@ def verify_password(pw: str, stored: str) -> bool:
     except (ValueError, TypeError, AttributeError):
         return False
     return hmac.compare_digest(dk.hex(), hash_hex)
+
+
+# A fixed hash to verify against when an email is unknown, so login timing does
+# not reveal whether an account exists (computed once at import).
+_DUMMY_HASH = hash_password("kiros-timing-equalizer")
 
 
 # --- tokens / ids -----------------------------------------------------------
@@ -139,7 +144,10 @@ def login(store, email: str, password: str):
     for every failure so we never reveal whether an email exists."""
     email = (email or "").strip().lower()
     user = store.get_user_by_email(email)
-    if not user or not user["is_active"] or not verify_password(password, user["pw_hash"]):
+    if not user or not user["is_active"]:
+        verify_password(password, _DUMMY_HASH)   # equalize timing vs. the real path
+        return None, "Wrong email or password."
+    if not verify_password(password, user["pw_hash"]):
         return None, "Wrong email or password."
     return user, None
 

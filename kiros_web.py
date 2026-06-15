@@ -11,13 +11,16 @@ No build step, stdlib only:
 """
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import hashlib
 import json
 import os
+import shutil
 import sys
 import threading
 import webbrowser
+from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -61,6 +64,7 @@ DEV = bool(os.environ.get("KIROS_DEV"))          # local http: drop Secure cooki
 TODAY_DEFAULT_N = 3
 TODAY_SCREEN_N = 5
 SESSION_MAX_AGE = 60 * 60 * 24 * 30
+MAX_BODY = 1 << 20                                # reject request bodies larger than 1 MiB
 
 # Per-user starter board, written on first login if the user has no board yet.
 STARTER_BOARD = """# KIROS
@@ -137,6 +141,24 @@ def ensure_user_data(uid: str) -> Path:
     if not board.exists():
         board.write_text(STARTER_BOARD, encoding="utf-8")
     return board
+
+
+_BOARD_LOCKS: dict = defaultdict(threading.Lock)   # one lock per uid; serializes that user's writes
+
+
+@contextlib.contextmanager
+def board_guard(uid: str):
+    """Serialize writes to one user's board and snapshot it to <board>.bak first,
+    so concurrent requests (multi-tab / PWA + calendar refresh) can't clobber or
+    truncate KIROS.md. Per-uid, so distinct users never contend."""
+    with _BOARD_LOCKS[uid]:
+        board = board_file(uid)
+        if board.exists():
+            try:
+                shutil.copy2(board, board.parent / (board.name + ".bak"))
+            except OSError:
+                pass
+        yield
 
 
 # --- Descriptions sidecar (rich imported notes; keyed by source url) ----------
@@ -550,6 +572,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache, must-revalidate")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         for c in (cookies or []):
             self.send_header("Set-Cookie", c)
         self.end_headers()
@@ -583,6 +608,11 @@ class Handler(BaseHTTPRequestHandler):
         return auth.user_for_session(STORE, self._cookies().get(auth.SESSION_COOKIE))
 
     def _client_ip(self) -> str:
+        # Behind Traefik the socket peer is the proxy; trust its X-Forwarded-For
+        # so the rate limiter keys on the real client (paired with email keys below).
+        xff = self.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
         return self.client_address[0] if self.client_address else "?"
 
     def _board(self, uid: str):
@@ -596,7 +626,7 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_static(path)
             return
         if path.startswith("/u/") and path.endswith("/kiros.ics"):  # tokenized per-user feed
-            self._serve_ics(path.split("/")[2])
+            self._serve_ics(path.split("/")[2], parse_qs(parsed.query))
             return
         if path in PUBLIC_PAGES:
             if self._user():
@@ -671,7 +701,7 @@ class Handler(BaseHTTPRequestHandler):
                 html = html.replace(ref, "%s?v=%s" % (ref, v))
         self._send(200, html.encode("utf-8"), "text/html")
 
-    def _serve_ics(self, token: str) -> None:
+    def _serve_ics(self, token: str, query=None) -> None:
         u = STORE.get_user_by_ics_token(token)
         if not u or not u["is_active"]:
             self._send(404, b"not found", "text/plain")
@@ -682,6 +712,8 @@ class Handler(BaseHTTPRequestHandler):
                           load_descriptions(desc_file(uid)), read_completions(done_file(uid))).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/calendar; charset=utf-8")
+        if (query or {}).get("download"):
+            self.send_header("Content-Disposition", "attachment; filename=kiros-today.ics")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
@@ -696,6 +728,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if int(self.headers.get("Content-Length", 0) or 0) > MAX_BODY:
+            self._json({"error": "request too large"}, 413)
+            return
         body = self._read_json()
 
         if path == "/api/auth/signup":
@@ -711,46 +746,54 @@ class Handler(BaseHTTPRequestHandler):
         if not user:
             self._json({"error": "auth required"}, 401)
             return
+
+        # Every state change (logout included) requires a matching CSRF token.
+        if not auth.csrf_ok(self._cookies().get(auth.CSRF_COOKIE), self.headers.get(auth.CSRF_HEADER, "")):
+            self._json({"error": "bad csrf"}, 403)
+            return
+
         if path == "/api/auth/logout":
             auth.end_session(STORE, self._cookies().get(auth.SESSION_COOKIE))
             self._json({"ok": True}, cookies=[clear_cookie(auth.SESSION_COOKIE), clear_cookie(auth.CSRF_COOKIE)])
             return
 
-        # Every other state change requires a matching CSRF token (double-submit).
-        if not auth.csrf_ok(self._cookies().get(auth.CSRF_COOKIE), self.headers.get(auth.CSRF_HEADER, "")):
-            self._json({"error": "bad csrf"}, 403)
-            return
-
         uid = user["id"]
         ensure_user_data(uid)
         bp = str(board_file(uid))
-        if path == "/api/capture":
-            self._json({"ok": kiros.add_capture(bp, str(body.get("text", "")))})
-        elif path == "/api/complete":
-            self._complete(uid, bp, body)
-        elif path == "/api/now":
+
+        # Reads / non-board writes need no board snapshot.
+        if path == "/api/now":
             payload = board_payload(self._board(uid), date.today(), body.get("energy") or None,
                                     body.get("time"), n=1, descs=load_descriptions(desc_file(uid)),
                                     comps=read_completions(done_file(uid)))
             self._json({"pick": (payload["today"] or [None])[0]})
-        elif path == "/api/task/save":
-            self._task_save(uid, bp, body)
-        elif path == "/api/task/delete":
-            self._json({"ok": kiros.remove_line(bp, str(body.get("raw", "")))})
-        elif path == "/api/prefs":
+            return
+        if path == "/api/prefs":
             save_prefs(uid, body if isinstance(body, dict) else {})
             self._json({"ok": True})
-        elif path == "/api/company/save":
-            name = str(body.get("name", "")).strip()
-            self._json({"ok": bool(name) and kiros.add_company(bp, name)})
-        elif path == "/api/project/save":
-            self._project_save(uid, bp, body)
-        elif path == "/api/project/delete":
-            self._json({"ok": kiros.remove_front(bp, str(body.get("code", "")))})
-        elif path == "/api/front/update":
-            self._front_update(bp, body)
-        else:
-            self._send(404, b"not found", "text/plain")
+            return
+
+        # Board mutations: serialized per-user + snapshotted first (see board_guard).
+        with board_guard(uid):
+            if path == "/api/capture":
+                self._json({"ok": kiros.add_capture(bp, str(body.get("text", "")))})
+            elif path == "/api/complete":
+                self._complete(uid, bp, body)
+            elif path == "/api/task/save":
+                self._task_save(uid, bp, body)
+            elif path == "/api/task/delete":
+                self._json({"ok": kiros.remove_line(bp, str(body.get("raw", "")))})
+            elif path == "/api/company/save":
+                name = str(body.get("name", "")).strip()
+                self._json({"ok": bool(name) and kiros.add_company(bp, name)})
+            elif path == "/api/project/save":
+                self._project_save(uid, bp, body)
+            elif path == "/api/project/delete":
+                self._json({"ok": kiros.remove_front(bp, str(body.get("code", "")))})
+            elif path == "/api/front/update":
+                self._front_update(bp, body)
+            else:
+                self._send(404, b"not found", "text/plain")
 
     # -- auth endpoint handlers --
     def _signup(self, body: dict) -> None:
@@ -767,7 +810,8 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": True, "redirect": "/"}, cookies=self._auth_cookies(token))
 
     def _login(self, body: dict) -> None:
-        if not self._rl("login"):
+        email = str(body.get("email", "")).strip().lower()
+        if not (self._rl("login") and RATE.allow("login-email:" + email)):
             self._json({"error": "Too many attempts. Try again later."}, 429)
             return
         user, err = auth.login(STORE, body.get("email", ""), body.get("password", ""))
@@ -785,8 +829,8 @@ class Handler(BaseHTTPRequestHandler):
         resp = {"ok": True}
         if token:
             link = "/reset?token=%s" % token
-            print("  [reset] %s -> %s" % (body.get("email", ""), link))
-            if DEV:
+            if DEV:                              # never log a live reset token in prod
+                print("  [reset] %s -> %s" % (body.get("email", ""), link))
                 resp["devResetLink"] = link
         self._json(resp)
 
