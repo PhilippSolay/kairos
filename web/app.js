@@ -162,7 +162,7 @@ function renderToday(data) {
 }
 
 // --- Manage (the dense workhorse) ------------------------------------------
-const LANE_LABEL = { inbox: "Inbox", active: "Active", today: "Today", delegated: "Delegated", parking: "Parked", done: "Done" };
+const LANE_LABEL = { inbox: "Inbox", active: "Next Up", today: "Today", delegated: "Delegated", parking: "Parked", done: "Done" };
 function laneLabel(lane) { return (uiPrefs.laneLabels && uiPrefs.laneLabels[lane]) || LANE_LABEL[lane] || lane; }
 let mg = { tasks: [], fronts: [], companies: [], lanes: [], inbox: [], date: "" };
 const mgFilter = { q: "", company: "", lanes: new Set(), sort: "score", dir: -1 };
@@ -501,7 +501,7 @@ const SVG = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const STATUS = [
   { lane: "parking", label: "Parked", icon: SVG('<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>') },
   { lane: "inbox", label: "Inbox", icon: SVG('<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>') },
-  { lane: "active", label: "Active", icon: SVG('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>') },
+  { lane: "active", label: "Next Up", icon: SVG('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>') },
   { lane: "today", label: "Today", icon: SVG('<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/>') },
   { lane: "done", label: "Mark done", action: "complete", icon: SVG('<polyline points="20 6 9 17 4 12"/>') },
 ];
@@ -709,7 +709,7 @@ function doDelete() {
 function doIt() {
   clearTimeout(saveTimer);
   $("#editor-panel").elements.lane.value = "active";
-  autoSave(true).then(() => { $("#editor").hidden = true; refreshAfterEdit(); toast("On it — moved to Active."); });
+  autoSave(true).then(() => { $("#editor").hidden = true; refreshAfterEdit(); toast("On it — moved to Next Up."); });
 }
 // Done is a terminal status: flush any pending edits, then mark the task complete.
 function completeFromEditor() {
@@ -1753,24 +1753,33 @@ function initProfile() {
 
 // --- Onboarding (first run) -------------------------------------------------
 let onbStep = 0;
-let onbCompanies = [];          // [{ name, icon }] added during onboarding
-let onbPickedIcon = "briefcase";
-const ONB_STEPS = ["welcome", "companies", "appearance", "learn"];
+let onbCompanies = [];          // [{ name, icon }] contexts added during onboarding
+let onbSections = [];           // [{ name, company }] first sections added during onboarding
+let onbDraftIcon = null;        // icon chosen for the in-progress context row (null → show "+")
+const ONB_STEPS = ["welcome", "companies", "sections", "appearance", "learn"];
 
 function showOnboarding() {
   const m = $("#onboarding");
   if (!m) return;
-  onbStep = 0; onbCompanies = []; onbPickedIcon = "briefcase";
+  onbStep = 0; onbCompanies = []; onbSections = []; onbDraftIcon = null;
   m.hidden = false;
   renderOnbStep();
 }
-function finishOnboarding() {
+async function finishOnboarding() {
+  // Create contexts then sections (a section needs its company to exist first), then store icons.
+  // Everything is collected locally until here so rows stay freely editable during onboarding.
+  for (const c of onbCompanies) {
+    await api("/api/company/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: c.name }) }).catch(() => {});
+  }
+  for (const s of onbSections) {
+    await api("/api/project/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company: s.company, name: s.name, importance: 3 }) }).catch(() => {});
+  }
   const icons = { ...(uiPrefs.companyIcons || {}) };
   onbCompanies.forEach((c) => { icons[c.name] = c.icon; });
   uiPrefs.companyIcons = icons;
-  const m = $("#onboarding"); if (m) m.hidden = true;
-  // Full reload so the board + company filter rebuild with the new contexts and icons.
-  saveUiPrefs({ onboarded: true, companyIcons: icons }).then(() => location.reload());
+  // Full reload so the board + company filter rebuild with the new contexts, sections, and icons.
+  await saveUiPrefs({ onboarded: true, companyIcons: icons });
+  location.reload();
 }
 function onbNext() {
   if (onbStep >= ONB_STEPS.length - 1) { finishOnboarding(); return; }
@@ -1784,6 +1793,95 @@ function renderOnbStep() {
   const body = $("#onb-body");
   if (body) { body.innerHTML = ""; body.appendChild(ONB_RENDER[ONB_STEPS[onbStep]]()); }
 }
+// --- Onboarding row builders (contexts + sections) -------------------------
+function renderCompanyRows(box) {
+  box.innerHTML = "";
+  onbCompanies.forEach((c) => box.appendChild(companyRow(c, box)));
+  box.appendChild(companyDraftRow(box));
+}
+function companyRow(c, box) {
+  const row = el("div", "onb-row");
+  const ico = el("button", "onb-row-ico"); ico.type = "button"; ico.title = "Change icon";
+  ico.innerHTML = iconInner(c.icon);
+  const pick = el("div", "onb-iconpick onb-row-pick"); pick.hidden = true;
+  buildIconPicker(pick, c.icon, (val) => { c.icon = val; ico.innerHTML = iconInner(val); pick.hidden = true; });
+  ico.onclick = () => { pick.hidden = !pick.hidden; };
+  const inp = el("input", "onb-row-in"); inp.value = c.name; inp.title = "Rename";
+  inp.onchange = () => {
+    const v = inp.value.trim();
+    if (v && v !== c.name) { onbSections.forEach((s) => { if (s.company === c.name) s.company = v; }); c.name = v; }
+    else inp.value = c.name;
+  };
+  const del = el("button", "onb-row-del", "✕"); del.type = "button"; del.title = "Remove";
+  del.onclick = () => { onbCompanies = onbCompanies.filter((x) => x !== c); onbSections = onbSections.filter((s) => s.company !== c.name); renderCompanyRows(box); };
+  row.append(ico, inp, del, pick);
+  return row;
+}
+function companyDraftRow(box) {
+  const row = el("div", "onb-row");
+  const ico = el("button", "onb-row-ico" + (onbDraftIcon ? "" : " empty")); ico.type = "button"; ico.title = "Pick an icon";
+  ico.innerHTML = onbDraftIcon ? iconInner(onbDraftIcon) : "+";
+  const pick = el("div", "onb-iconpick onb-row-pick"); pick.hidden = true;
+  buildIconPicker(pick, onbDraftIcon, (val) => { onbDraftIcon = val; ico.innerHTML = iconInner(val); ico.classList.remove("empty"); pick.hidden = true; });
+  ico.onclick = () => { pick.hidden = !pick.hidden; };
+  const inp = el("input", "onb-row-in"); inp.placeholder = "Add Companies or Context";
+  const add = el("button", "primary onb-row-add", "Add"); add.type = "button";
+  const commit = () => {
+    const name = inp.value.trim();
+    if (!name || onbCompanies.some((c) => c.name.toLowerCase() === name.toLowerCase())) { inp.focus(); return; }
+    onbCompanies.push({ name, icon: onbDraftIcon || "briefcase" });
+    onbDraftIcon = null;
+    renderCompanyRows(box);
+    const next = box.querySelector(".onb-row:last-child .onb-row-in"); if (next) next.focus();
+  };
+  add.onclick = commit;
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } });
+  row.append(ico, inp, add, pick);
+  return row;
+}
+function renderSectionRows(box) {
+  box.innerHTML = "";
+  if (!onbCompanies.length) {
+    box.appendChild(el("p", "onb-empty", "Add a context on the previous step first — sections live inside one."));
+    return;
+  }
+  onbSections.forEach((s) => box.appendChild(sectionRow(s, box)));
+  box.appendChild(sectionDraftRow(box));
+}
+function sectionRow(s, box) {
+  const row = el("div", "onb-row");
+  if (onbCompanies.length > 1) row.appendChild(el("span", "onb-row-tag", esc(s.company)));
+  const inp = el("input", "onb-row-in"); inp.value = s.name; inp.title = "Rename";
+  inp.onchange = () => { const v = inp.value.trim(); if (v) s.name = v; else inp.value = s.name; };
+  const del = el("button", "onb-row-del", "✕"); del.type = "button"; del.title = "Remove";
+  del.onclick = () => { onbSections = onbSections.filter((x) => x !== s); renderSectionRows(box); };
+  row.append(inp, del);
+  return row;
+}
+function sectionDraftRow(box) {
+  const row = el("div", "onb-row");
+  let sel = null;
+  if (onbCompanies.length > 1) {
+    sel = el("select", "onb-row-sel");
+    sel.innerHTML = onbCompanies.map((c) => `<option>${esc(c.name)}</option>`).join("");
+    row.appendChild(sel);
+  }
+  const inp = el("input", "onb-row-in"); inp.placeholder = "Add Section";
+  const add = el("button", "primary onb-row-add", "Add"); add.type = "button";
+  const commit = () => {
+    const name = inp.value.trim();
+    const company = sel ? sel.value : onbCompanies[0].name;
+    if (!name || onbSections.some((s) => s.company === company && s.name.toLowerCase() === name.toLowerCase())) { inp.focus(); return; }
+    onbSections.push({ name, company });
+    renderSectionRows(box);
+    const next = box.querySelector(".onb-row:last-child .onb-row-in"); if (next) next.focus();
+  };
+  add.onclick = commit;
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } });
+  row.append(inp, add);
+  return row;
+}
+
 const ONB_RENDER = {
   welcome() {
     return el("div", "onb-step",
@@ -1796,33 +1894,17 @@ const ONB_RENDER = {
     wrap.innerHTML =
       `<h1>Your contexts</h1>
        <p class="onb-lead">Add the areas of your life or work, and pick an icon for each.</p>
-       <div class="onb-iconpick" id="onb-iconpick"></div>
-       <div class="onb-addrow">
-         <input id="onb-co-name" type="text" placeholder="e.g. Work, Side project, Home" autocomplete="off" />
-         <button type="button" class="primary" id="onb-co-add">Add</button>
-       </div>
-       <div class="onb-colist" id="onb-colist"></div>`;
-    const pick = wrap.querySelector("#onb-iconpick");
-    const paintPick = () => buildIconPicker(pick, onbPickedIcon, (val) => { onbPickedIcon = val; paintPick(); });
-    paintPick();
-    const list = wrap.querySelector("#onb-colist");
-    const renderList = () => {
-      list.innerHTML = onbCompanies.map((c, i) =>
-        `<span class="onb-cochip"><span class="co-ico">${iconInner(c.icon)}</span>${esc(c.name)}<button type="button" data-i="${i}" aria-label="Remove">✕</button></span>`).join("");
-      list.querySelectorAll("button[data-i]").forEach((b) => b.onclick = () => { onbCompanies.splice(Number(b.dataset.i), 1); renderList(); });
-    };
-    const add = () => {
-      const inp = wrap.querySelector("#onb-co-name");
-      const name = inp.value.trim();
-      if (name && !onbCompanies.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
-        onbCompanies.push({ name, icon: onbPickedIcon });
-        api("/api/company/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).catch(() => {});
-        renderList();
-      }
-      inp.value = ""; inp.focus();
-    };
-    wrap.querySelector("#onb-co-add").onclick = add;
-    wrap.querySelector("#onb-co-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+       <div class="onb-rows" id="onb-corows"></div>`;
+    renderCompanyRows(wrap.querySelector("#onb-corows"));
+    return wrap;
+  },
+  sections() {
+    const wrap = el("div", "onb-step");
+    wrap.innerHTML =
+      `<h1>Your sections</h1>
+       <p class="onb-lead">This is for categorizing — like Sales, Design, or Personal.</p>
+       <div class="onb-rows" id="onb-secrows"></div>`;
+    renderSectionRows(wrap.querySelector("#onb-secrows"));
     return wrap;
   },
   appearance() {
