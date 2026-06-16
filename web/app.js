@@ -219,8 +219,15 @@ function companySlug(name) { return (name || "").toLowerCase().replace(/[^a-z0-9
 // rendered via <img src="/api/icon/<id>"> — same safe path as the shipped icons.
 function isCustomIcon(v) { return typeof v === "string" && v.startsWith("custom:"); }
 function customIconUrl(v) { return "/api/icon/" + encodeURIComponent(v.slice(7)); }
+// If a stored icon file is gone (e.g. reaped orphan), degrade to the label text rather than a blank slot.
+function coIconFallback(img) {
+  const span = document.createElement("span");
+  span.className = "co-text";
+  span.textContent = img.getAttribute("alt") || "";
+  img.replaceWith(span);
+}
 function customImg(v, alt, cls) {
-  return `<img class="co-custom${cls ? " " + cls : ""}" src="${customIconUrl(v)}" alt="${esc(alt || "")}" draggable="false" onerror="this.remove()" />`;
+  return `<img class="co-custom${cls ? " " + cls : ""}" src="${customIconUrl(v)}" alt="${esc(alt || "")}" draggable="false" onerror="coIconFallback(this)" />`;
 }
 // Inner glyph markup for a small icon slot — built-in (inline svg) or custom (<img>).
 function iconInner(v) { return isCustomIcon(v) ? customImg(v) : icoSvg(v); }
@@ -240,7 +247,7 @@ async function uploadCompanyIcon(file) {
   if (!file) throw new Error("No file chosen.");
   const fname = (file.name || "").toLowerCase();
   if (file.type !== "image/svg+xml" && !fname.endsWith(".svg")) throw new Error("Please choose an .svg file.");
-  if (file.size > 64 * 1024) throw new Error("SVG too large (max 64 KB).");
+  if (file.size > 64 * 1024) throw new Error("SVG too large (max 64 KB)."); // mirrors server ICON_MAX_BYTES (kiros_web.py)
   const svg = await file.text();
   const res = await fetch("/api/icon", {
     method: "POST",

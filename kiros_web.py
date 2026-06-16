@@ -514,19 +514,22 @@ BG_MAX_BYTES = 4 * 1024 * 1024
 _BG_DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,(.+)$", re.DOTALL)
 
 # --- Custom company icons (user-uploaded SVG) --------------------------------
-# SVG is an XSS vector, so uploads are: validated here (reject scripts / event
-# handlers / external refs / non-SVG), stored per-user, and only ever rendered
-# via <img src> (browsers run no scripts in img-loaded SVGs) with nosniff + a
-# sandbox CSP. Served only to the owning session — never cross-user.
-ICON_MAX_BYTES = 64 * 1024
-ICON_MAX_COUNT = 40
+# SVG is an XSS vector. The *guarantee* of safety is the render path: icons are
+# served only via <img src> (browsers run no scripts in img-loaded SVGs) with
+# X-Content-Type-Options: nosniff and a `sandbox` CSP, and only to the owning
+# session — never cross-user. validate_svg() below is a fast-fail courtesy layer
+# (defense in depth): it rejects the obvious vectors before storing, but the CSP
+# + <img> model is what actually neutralises anything that slips through.
+ICON_MAX_BYTES = 64 * 1024                                # keep in sync with the client pre-check in web/app.js (uploadCompanyIcon)
+ICON_MAX_COUNT = 40                                       # per-user cap; unreferenced icons are reaped on upload (see prune_unreferenced_icons)
 _ICON_ID_RE = re.compile(r"^[a-f0-9]{6,40}$")
 _SVG_FORBIDDEN = re.compile(
-    r"<\s*(?:script|foreignobject|iframe|embed|object|audio|video|set|animate|handler)\b"
+    r"<\s*(?:script|foreignobject|iframe|embed|object|audio|video|set|animate[a-z]*|mpath|handler)\b"
     r"|<!doctype|<!entity|javascript:|data:text/html"
     r"|\son[a-z]+\s*=",                                  # inline event handlers (onload=, onclick=, ...)
     re.IGNORECASE)
-_SVG_EXT_REF = re.compile(r"(?:xlink:href|href|src)\s*=\s*[\"']?\s*(?:https?:)?//", re.IGNORECASE)
+# Reject external/data references in href/src/xlink:href (http(s):, protocol-relative //, or data:).
+_SVG_EXT_REF = re.compile(r"(?:xlink:href|href|src)\s*=\s*[\"']?\s*(?:https?:|data:|//)", re.IGNORECASE)
 
 
 def validate_svg(text: str):
@@ -563,6 +566,30 @@ def save_prefs(uid: str, data: dict) -> None:
             cur[k] = data[k]
     user_dir(uid).mkdir(parents=True, exist_ok=True)
     prefs_file(uid).write_text(json.dumps(cur, indent=2), encoding="utf-8")
+
+
+def referenced_icon_ids(uid: str) -> set:
+    """Custom-icon ids currently referenced by this user's companyIcons map."""
+    vals = (load_prefs(uid).get("companyIcons") or {}).values()
+    return {v.split(":", 1)[1] for v in vals if isinstance(v, str) and v.startswith("custom:")}
+
+
+def prune_unreferenced_icons(uid: str, keep=()) -> int:
+    """Delete stored icon files no company points at (orphans from swaps/renames/removes).
+    `keep` protects ids mid-upload. Returns the count removed."""
+    d = icons_dir(uid)
+    if not d.is_dir():
+        return 0
+    refs = referenced_icon_ids(uid) | set(keep)
+    removed = 0
+    for f in d.glob("*.svg"):
+        if f.stem not in refs:
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass
+    return removed
 
 
 def admin_users_payload() -> list:
@@ -834,8 +861,10 @@ class Handler(BaseHTTPRequestHandler):
         target = d / (iid + ".svg")
         if not target.exists():
             if len(list(d.glob("*.svg"))) >= ICON_MAX_COUNT:
-                self._json({"ok": False, "error": "Too many custom icons. Remove some first."}, 413)
-                return
+                prune_unreferenced_icons(uid, keep={iid})              # reap orphans so the cap counts live icons
+                if len(list(d.glob("*.svg"))) >= ICON_MAX_COUNT:
+                    self._json({"ok": False, "error": "Too many custom icons in use. Remove some first."}, 413)
+                    return
             target.write_text(clean, encoding="utf-8")
         self._json({"ok": True, "id": iid})
 

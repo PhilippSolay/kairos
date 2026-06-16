@@ -7,6 +7,7 @@ descriptions.json
 completions.jsonl
 completions.jsonl.seed-bak
 data/
+backups/
 
 # ── Private workflow config & source filters ─────────────────────────────────
 # .claude/ rituals + sources.md embed real Asana project/section GIDs, the

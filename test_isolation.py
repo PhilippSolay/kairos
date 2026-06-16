@@ -7,6 +7,7 @@ see another's data, and that auth, CSRF, and admin gating are enforced.
 import http.cookiejar
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -177,11 +178,17 @@ class TestCustomIcons(_ServerCase):
         # Isolation: B cannot fetch A's icon (serve path derives from B's own uid).
         self.assertEqual(b.get_raw("/api/icon/" + iid)[0], 404)
 
+        # Content-addressed: re-uploading the same SVG returns the same id and keeps one file on disk.
+        self.assertEqual(a.post("/api/icon", {"svg": good})[1]["id"], iid)
+        self.assertEqual(len(list(Path(self.tmp).glob("users/*/icons/*.svg"))), 1)
+
         # Malicious / invalid SVGs are rejected at upload.
         for bad in (
             '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
             '<svg xmlns="http://www.w3.org/2000/svg" onload="x()"><rect/></svg>',
             '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://evil/x.png"/></svg>',
+            '<svg xmlns="http://www.w3.org/2000/svg"><animateTransform attributeName="x"/></svg>',
+            '<svg xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,AAAA"/></svg>',
             '<html><body>nope</body></html>',
         ):
             self.assertEqual(a.post("/api/icon", {"svg": bad})[0], 400)
@@ -226,6 +233,39 @@ class TestSvgValidation(unittest.TestCase):
         big = '<svg xmlns="http://www.w3.org/2000/svg">' + "<rect/>" * 20000 + "</svg>"
         _, err = self.validate(big)
         self.assertIsNotNone(err)
+
+
+class TestIconGC(unittest.TestCase):
+    """Unit coverage for orphan-icon reaping (no server; USERS_DIR pointed at a tmp dir)."""
+
+    def setUp(self):
+        import kiros_web
+        self.kw = kiros_web
+        self.tmp = tempfile.mkdtemp()
+        self._orig = kiros_web.USERS_DIR
+        kiros_web.USERS_DIR = Path(self.tmp) / "users"
+
+    def tearDown(self):
+        self.kw.USERS_DIR = self._orig
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_prune_removes_only_unreferenced(self):
+        kw, uid = self.kw, "u1"
+        d = kw.icons_dir(uid)
+        d.mkdir(parents=True, exist_ok=True)
+        for name in ("aaaaaa", "bbbbbb", "cccccc"):
+            (d / (name + ".svg")).write_text("<svg/>", encoding="utf-8")
+        kw.save_prefs(uid, {"companyIcons": {"X": "custom:aaaaaa", "Y": "home"}})  # only aaaaaa referenced
+
+        self.assertEqual(kw.prune_unreferenced_icons(uid), 2)
+        self.assertTrue((d / "aaaaaa.svg").exists())     # referenced → kept
+        self.assertFalse((d / "bbbbbb.svg").exists())    # orphan → reaped
+        self.assertFalse((d / "cccccc.svg").exists())
+
+        # keep= protects an id mid-upload even though no company references it yet.
+        (d / "dddddd.svg").write_text("<svg/>", encoding="utf-8")
+        self.assertEqual(kw.prune_unreferenced_icons(uid, keep={"dddddd"}), 0)
+        self.assertTrue((d / "dddddd.svg").exists())
 
 
 if __name__ == "__main__":
