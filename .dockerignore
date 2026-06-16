@@ -1,4 +1,5 @@
-# Only kiros.py, kiros_web.py and web/ belong in the image.
+# Image holds app code only: kiros.py kiros_web.py auth.py store.py
+# migrate_to_multiuser.py + web/. Everything below is kept out of the build context.
 .git
 .gitignore
 .claude/
@@ -6,8 +7,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Data is mounted as a volume, never baked into the image
+# Data + backups are mounted/created at runtime, never baked into the image
 data/
+backups/
 KIROS.md
 descriptions.json
 completions.jsonl
@@ -16,6 +18,9 @@ sources.md
 
 # Dev-only
 test_kiros.py
+test_auth.py
+test_isolation.py
+dev_seed.py
 research/
 *.md
 .env

@@ -1,10 +1,11 @@
-# Kiros — stdlib-only Python app, no build step, no third-party deps.
+# Kiros (multi-user) — stdlib-only Python app, no build step, no third-party deps.
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# App code only. The board + sidecars live in a mounted volume at /data.
-COPY kiros.py kiros_web.py ./
+# App code. Identity DB (kiros.db) + per-user boards live in the mounted volume at /data.
+# migrate_to_multiuser.py is shipped so a single-user /data can be converted in-place.
+COPY kiros.py kiros_web.py auth.py store.py migrate_to_multiuser.py ./
 COPY web ./web
 
 ENV KIROS_HOST=0.0.0.0 \

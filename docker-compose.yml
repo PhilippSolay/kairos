@@ -1,7 +1,10 @@
 # Wired for the solay.cloud VPS (srv1322369): Traefik reverse proxy (traefik-traefik-1)
 # on the external `proxy` network, cert resolver `mytlschallenge` (TLS-ALPN-01).
 # Kairos exposes no host ports — Traefik reaches it over the shared network.
-# App-level HTTP Basic Auth (KIROS_AUTH_* in .env) protects the board.
+# MULTI-USER: the app has its own login (signup + cookie sessions) — no Basic Auth.
+# Identity (kiros.db) + per-user boards live in ./data. Convert an existing single-user
+# ./data with migrate_to_multiuser.py before first start (see DEPLOY.md).
+# Do NOT set KIROS_DEV in prod — it drops the Secure cookie flag.
 name: kairos
 services:
   kairos:
@@ -9,14 +12,14 @@ services:
     image: kairos:latest
     container_name: kairos
     restart: unless-stopped
-    env_file: .env            # KIROS_AUTH_USER / KIROS_AUTH_PASS
+    env_file: .env            # legacy; only the one-time migration reads KIROS_AUTH_PASS (new admin's pw). App ignores it.
     environment:
       KIROS_HOST: 0.0.0.0
       KIROS_PORT: "8765"
       KIROS_DATA: /data
       KIROS_NO_OPEN: "1"
     volumes:
-      - ./data:/data          # KIROS.md + descriptions.json + completions.jsonl persist here
+      - ./data:/data          # kiros.db + users/<uid>/{KIROS.md,descriptions.json,completions.jsonl} persist here
     networks:
       - proxy
     labels:
