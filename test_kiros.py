@@ -55,6 +55,14 @@ class AvoidanceBoost(unittest.TestCase):
     def test_explicit_avoid_flag_adds_boost(self):
         self.assertEqual(avoidance_boost(task(avoid=True), TODAY, W), W["avoid_flag_boost"])
 
+    def test_with_avoidance_false_zeroes_boost_and_lowers_score(self):
+        stale = task(added=date(2026, 5, 1), importance=3)        # well past the stale grace
+        boosted = score_task(stale, None, W, TODAY)
+        exempt = score_task(stale, None, W, TODAY, with_avoidance=False)
+        self.assertGreater(boosted.avoidance, 0.0)
+        self.assertEqual(exempt.avoidance, 0.0)                   # how Parked tasks are scored
+        self.assertLess(exempt.value, boosted.value)             # no aging boost -> lower score
+
 
 class EnergyMatch(unittest.TestCase):
     def test_no_target_is_neutral(self):

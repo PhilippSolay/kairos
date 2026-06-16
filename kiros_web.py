@@ -419,7 +419,9 @@ def tasks_payload(board, today: date, descs: dict) -> dict:
     open_by_front = {}
     for lane in kiros.LANES:
         for t in board.sections.get(lane, []):
-            score = kiros.score_task(t, board.fronts.get(t.front), board.weights, today)
+            # Parked is a deliberate "not now" — exempt it from the avoidance/aging boost + ↻ flag.
+            score = kiros.score_task(t, board.fronts.get(t.front), board.weights, today,
+                                     with_avoidance=(lane != "parking"))
             rows.append(task_dict(t, board, today, score, lane, descs))
             if not t.done:
                 open_by_front[t.front] = open_by_front.get(t.front, 0) + 1

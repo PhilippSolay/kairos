@@ -248,7 +248,7 @@ def energy_match(task: Task, target: str | None, w: dict) -> float:
 
 
 def score_task(task: Task, front: Front | None, w: dict, today: date,
-               target_energy: str | None = None) -> Score:
+               target_energy: str | None = None, with_avoidance: bool = True) -> Score:
     importance = task.importance if task.importance is not None else (
         front.importance if front else IMPORTANCE_DEFAULT)
     imp_component = importance * w["imp_mult"]
@@ -257,7 +257,7 @@ def score_task(task: Task, front: Front | None, w: dict, today: date,
     deadline = deadline_pressure(task, today, w)
     effort = EST_EFFORT.get(task.est, EST_EFFORT[EFFORT_DEFAULT])
     em = energy_match(task, target_energy, w)
-    avoid = avoidance_boost(task, today, w)
+    avoid = avoidance_boost(task, today, w) if with_avoidance else 0.0
     value = (imp_component + deadline + urgency) / effort * em * (1 + avoid)
     return Score(value, imp_component, deadline, effort, em, avoid, urgency)
 
