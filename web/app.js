@@ -172,9 +172,10 @@ let edIndex = -1;  // index of the open task within edRows (-1 = new/intake task
 function fillDatalist(elm, values) {
   elm.innerHTML = values.map((v) => `<option value="${esc(v)}"></option>`).join("");
 }
-function fillSelect(sel, pairs, current) {
+function fillSelect(sel, pairs, current, placeholder) {
   sel.innerHTML = "";
-  pairs.forEach(([value, label]) => {
+  const all = placeholder != null ? [["", placeholder], ...pairs] : pairs;
+  all.forEach(([value, label]) => {
     const o = document.createElement("option");
     o.value = value;
     o.textContent = label;
@@ -603,14 +604,14 @@ function edStep(delta) {
 }
 function frontsForCompany(company) { return mg.fronts.filter((f) => f.surface === company); }
 function populateFronts(company, selected) {
-  fillSelect($("#ed-front"), frontsForCompany(company).map((f) => [f.code, f.name]), selected);
+  fillSelect($("#ed-front"), frontsForCompany(company).map((f) => [f.code, f.name]), selected, "Select");
 }
 
 function openEditor(t, rawText) {
   const f = $("#editor-panel").elements;
-  const company = t ? (t.company || mg.companies[0] || "") : (mg.companies[0] || "");
-  fillSelect($("#ed-company"), mg.companies.map((c) => [c, c]), company);
-  populateFronts(company, t ? t.front : undefined);
+  const company = t ? (t.company || "") : "";    // new task → no preselection (shows "Select")
+  fillSelect($("#ed-company"), mg.companies.map((c) => [c, c]), company, "Select");
+  populateFronts(company, t ? t.front : "");
   f.title.value = t ? t.title : (rawText || "");
   f.lane.value = t ? (t.lane || "active") : "inbox";   // new tasks land in Inbox
   buildStatusToggle(f.lane.value);
@@ -989,20 +990,20 @@ function renderStructure() {
       const nameIn = document.createElement("input");
       nameIn.className = "struct-pname-in";
       nameIn.value = f.name;
-      nameIn.title = "Rename section";
+      nameIn.title = "Rename category";
       nameIn.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); nameIn.blur(); } };
       nameIn.onchange = () => {
         const v = nameIn.value.trim();
-        if (v && v !== f.name) structurePost("/api/front/update", { code: f.code, name: v }, "Section renamed.");
+        if (v && v !== f.name) structurePost("/api/front/update", { code: f.code, name: v }, "Category renamed.");
         else nameIn.value = f.name;
       };
       const impSel = document.createElement("select");
       impSel.className = "struct-imp-sel";
-      impSel.title = "Default importance for tasks in this section";
+      impSel.title = "Default importance for tasks in this category";
       impSel.innerHTML = [1, 2, 3, 4, 5].map((i) => `<option value="${i}"${i === f.importance ? " selected" : ""}>Importance ${i}</option>`).join("");
       impSel.onchange = () => structurePost("/api/front/update", { code: f.code, importance: impSel.value }, "Importance set.");
       const del = el("button", "struct-del", "×");
-      del.title = "Delete section";
+      del.title = "Delete category";
       del.onclick = () => deleteProject(f.code, f.name);
       row.append(nameIn, impSel, del);
       sec.appendChild(row);
@@ -1010,7 +1011,7 @@ function renderStructure() {
     const form = document.createElement("form");
     form.className = "struct-addproj";
     const opts = [1, 2, 3, 4, 5].map((i) => `<option value="${i}"${i === 3 ? " selected" : ""}>Importance ${i}</option>`).join("");
-    form.innerHTML = `<input name="pname" class="in" type="text" autocomplete="off" placeholder="+ add section" />
+    form.innerHTML = `<input name="pname" class="in" type="text" autocomplete="off" placeholder="+ add category" />
       <select name="pimp" class="in struct-impsel">${opts}</select>
       <button class="ghost" type="submit">Add</button>`;
     form.onsubmit = (e) => { e.preventDefault(); addProject(company, e.target.pname.value, e.target.pimp.value); };
@@ -1031,11 +1032,11 @@ function addCompany(name) {
   if (name.trim()) structurePost("/api/company/save", { name }, "Company added.");
 }
 function addProject(company, name, importance) {
-  if (name.trim()) structurePost("/api/project/save", { company, name, importance }, "Section added.");
+  if (name.trim()) structurePost("/api/project/save", { company, name, importance }, "Category added.");
 }
 function deleteProject(code, name) {
-  if (confirm(`Delete section "${name}"? Its tasks keep their code but lose their section mapping.`)) {
-    structurePost("/api/project/delete", { code }, "Section removed.");
+  if (confirm(`Delete category "${name}"? Its tasks keep their code but lose their category mapping.`)) {
+    structurePost("/api/project/delete", { code }, "Category removed.");
   }
 }
 function renameCompany(oldName, newName) {
@@ -1044,7 +1045,7 @@ function renameCompany(oldName, newName) {
   structurePost("/api/company/rename", { old: oldName, new: newName }, "Company renamed.");
 }
 function removeCompany(name) {
-  if (!confirm(`Remove company "${name}"? Its sections are removed; tasks keep their code but lose the section mapping.`)) return;
+  if (!confirm(`Remove company "${name}"? Its categories are removed; tasks keep their code but lose the category mapping.`)) return;
   const icons = { ...(uiPrefs.companyIcons || {}) };
   if (icons[name]) { delete icons[name]; uiPrefs.companyIcons = icons; saveUiPrefs({ companyIcons: icons }); }
   structurePost("/api/company/delete", { name }, "Company removed.");
@@ -1866,7 +1867,7 @@ function sectionDraftRow(box) {
     sel.innerHTML = onbCompanies.map((c) => `<option>${esc(c.name)}</option>`).join("");
     row.appendChild(sel);
   }
-  const inp = el("input", "onb-row-in"); inp.placeholder = "Add Section";
+  const inp = el("input", "onb-row-in"); inp.placeholder = "Add Category";
   const add = el("button", "primary onb-row-add", "Add"); add.type = "button";
   const commit = () => {
     const name = inp.value.trim();
@@ -1901,7 +1902,7 @@ const ONB_RENDER = {
   sections() {
     const wrap = el("div", "onb-step");
     wrap.innerHTML =
-      `<h1>Your sections</h1>
+      `<h1>Your categories</h1>
        <p class="onb-lead">This is for categorizing — like Sales, Design, or Personal.</p>
        <div class="onb-rows" id="onb-secrows"></div>`;
     renderSectionRows(wrap.querySelector("#onb-secrows"));

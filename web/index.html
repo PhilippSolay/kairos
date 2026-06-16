@@ -99,7 +99,7 @@
           <div id="account-menu" class="account-menu" role="menu">
             <button id="account-profile" class="account-item" type="button" role="menuitem">Profile</button>
             <button id="account-appearance" class="account-item" type="button" role="menuitem">Appearance</button>
-            <button id="account-structure" class="account-item" type="button" role="menuitem">Companies &amp; Sections</button>
+            <button id="account-structure" class="account-item" type="button" role="menuitem">Companies &amp; Categories</button>
             <a id="account-admin" href="/admin" class="account-item" role="menuitem" hidden>Admin dashboard</a>
             <button id="account-logout" class="account-item" type="button" role="menuitem">Log out</button>
           </div>
@@ -235,7 +235,7 @@
       <div class="ed-status-row"><div class="seg seg-status" id="ed-status"></div></div>
       <div class="ed-row2">
         <label class="fld"><span>Company</span><select name="company" id="ed-company" class="in"></select></label>
-        <label class="fld"><span>Section</span><select name="front" id="ed-front" class="in"></select></label>
+        <label class="fld"><span>Category</span><select name="front" id="ed-front" class="in"></select></label>
         <label class="fld"><span>Project</span><input name="group" id="ed-group" class="in" type="text" list="groups" autocomplete="off" placeholder="optional" /></label>
       </div>
       <input name="title" class="ed-title" type="text" placeholder="Task name" required />
@@ -288,7 +288,7 @@
               <li><b>2</b> marginal</li>
               <li><b>1</b> trivial</li>
             </ul>
-            <p class="tip-note">Leave blank → inherits the Section default. Set only to override.</p>
+            <p class="tip-note">Leave blank → inherits the Category default. Set only to override.</p>
           </section>
           <section class="tip">
             <h4>Urgency <em>— cost of doing it <b>later</b></em></h4>
@@ -407,7 +407,7 @@
     <div class="editor-scrim" data-sclose></div>
     <div class="editor-panel">
       <div class="editor-head">
-        <h2>Companies &amp; Sections</h2>
+        <h2>Companies &amp; Categories</h2>
         <button type="button" class="editor-x" data-sclose aria-label="Close">✕</button>
       </div>
       <form id="company-form" class="struct-addco">
