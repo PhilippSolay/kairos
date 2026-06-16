@@ -8,8 +8,7 @@
 name: kairos
 services:
   kairos:
-    build: .
-    image: kairos:latest
+    image: ghcr.io/philippsolay/kairos:latest   # built + pushed by .github/workflows/deploy.yml; the VPS pulls it
     container_name: kairos
     restart: unless-stopped
     env_file: .env            # legacy; only the one-time migration reads KIROS_AUTH_PASS (new admin's pw). App ignores it.

@@ -1,0 +1,79 @@
+name: Deploy to VPS
+
+# Push to main / feat/multi-user → run tests → build image → push to GHCR →
+# SSH into the VPS and `docker compose pull && up -d`. Mirrors the ibu-kadek-catering
+# pipeline. The ./data volume on the VPS persists across deploys (only the image swaps).
+on:
+  push:
+    branches: [main, feat/multi-user]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: ghcr.io/philippsolay/kairos
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run suite (stdlib-only, no deps)
+        run: python -m unittest test_kiros test_auth test_isolation
+
+  build-and-push:
+    name: Build & push image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy on VPS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync compose to VPS    # keeps /opt/kairos/docker-compose.yml in sync with the repo
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_SSH_HOST }}
+          username: ${{ secrets.VPS_SSH_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: docker-compose.yml
+          target: /opt/kairos
+      - name: SSH deploy (pull + restart)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_SSH_HOST }}
+          username: ${{ secrets.VPS_SSH_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/kairos
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
