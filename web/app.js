@@ -1133,7 +1133,7 @@ function makeMatrixDraggable(card, t) {
     const id = e.pointerId, sx = e.clientX, sy = e.clientY;
     const srcCell = card.closest(".m-cell");
     let dragging = false, armed = !isTouch, ghost = null;
-    const lp = isTouch ? setTimeout(() => { armed = true; if (navigator.vibrate) navigator.vibrate(12); }, 250) : 0;
+    const lp = isTouch ? setTimeout(() => { armed = true; card.style.touchAction = "none"; if (navigator.vibrate) navigator.vibrate(12); }, 250) : 0;
 
     const cellAt = (x, y) => {
       const vis = ghost && ghost.style.display;
@@ -1182,6 +1182,7 @@ function makeMatrixDraggable(card, t) {
       card.classList.remove("dragging");
       document.querySelectorAll(".m-cell").forEach((c) => c.classList.remove("drop-on"));
       try { card.releasePointerCapture(id); } catch (_) {}
+      card.style.touchAction = "";   // restore CSS pan-y (it was set to none once the drag armed)
       if (!wasDragging && !bail) openEditor(t);   // it was a tap
     };
     const up = (ev) => end(ev, false);
@@ -1286,7 +1287,7 @@ function makeCardDraggable(card, t) {
     const isTouch = e.pointerType === "touch";
     const id = e.pointerId, sx = e.clientX, sy = e.clientY;
     let dragging = false, armed = !isTouch, ghost = null;
-    const lp = isTouch ? setTimeout(() => { armed = true; if (navigator.vibrate) navigator.vibrate(12); }, 250) : 0;
+    const lp = isTouch ? setTimeout(() => { armed = true; card.style.touchAction = "none"; if (navigator.vibrate) navigator.vibrate(12); }, 250) : 0;
 
     const colAt = (x, y) => {
       const vis = ghost && ghost.style.display;
@@ -1337,6 +1338,7 @@ function makeCardDraggable(card, t) {
       card.classList.remove("b-dragging");
       document.querySelectorAll(".board-col").forEach((c) => c.classList.remove("drop-on"));
       try { card.releasePointerCapture(id); } catch (_) {}
+      card.style.touchAction = "";   // restore CSS pan-y (it was set to none once the drag armed)
       if (!wasDragging && !bail) openEditor(t);   // it was a tap
     };
     const up = (ev) => end(ev, false);
