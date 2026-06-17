@@ -58,23 +58,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Sync compose to VPS    # keeps /opt/kairos/docker-compose.yml in sync with the repo
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_SSH_HOST }}
-          username: ${{ secrets.VPS_SSH_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: docker-compose.yml
-          target: /opt/kairos
-      - name: SSH deploy (pull + restart)
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_SSH_HOST }}
-          username: ${{ secrets.VPS_SSH_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
-            cd /opt/kairos
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
+      - name: Deploy (sync compose + pull/restart, retried 3×)
+        env:
+          KEY: ${{ secrets.VPS_SSH_KEY }}
+          HOST: ${{ secrets.VPS_SSH_HOST }}
+          USER: ${{ secrets.VPS_SSH_USER }}
+        run: |
+          printf '%s\n' "$KEY" > key && chmod 600 key
+          H="$USER@$HOST"
+          OPTS="-i key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=10"
+          ok=0
+          for i in 1 2 3; do
+            if scp $OPTS docker-compose.yml "$H:/opt/kairos/docker-compose.yml" \
+               && ssh $OPTS "$H" 'cd /opt/kairos && docker compose pull && docker compose up -d && docker image prune -f'; then
+              echo "✅ deployed on attempt $i"; ok=1; break
+            fi
+            echo "⚠️ attempt $i failed (likely transient SSH timeout / fail2ban) — retrying in 20s"; sleep 20
+          done
+          rm -f key
+          [ "$ok" = 1 ] || { echo "❌ deploy failed after 3 attempts"; exit 1; }
