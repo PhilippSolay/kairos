@@ -507,7 +507,10 @@ button.ghost.danger:hover { border-color: var(--circle); }
 .board-count { font-size: 13px; color: var(--faint); }
 .board-col-body { display: flex; flex-direction: column; gap: 8px; }
 .board-empty { color: var(--faint); font-size: 13px; text-align: center; padding: 14px 0; }
-.b-card { display: flex; flex-direction: row; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px; cursor: grab; touch-action: pan-x pan-y; transition: border-color 0.15s var(--ease); }
+/* touch-action: pan-y (not pan-x) so a horizontal touch-drag becomes a card drag instead of
+   scrolling the board — matches .m-item. Press-and-hold (250ms) arms the drag; vertical
+   swipe still scrolls the column; scroll the board sideways via the headers/gaps. */
+.b-card { display: flex; flex-direction: row; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px; cursor: grab; touch-action: pan-y; transition: border-color 0.15s var(--ease); }
 .b-card:hover { border-color: var(--faint); }
 .b-card.b-dragging { opacity: 0.35; cursor: grabbing; }
 .b-ghost { position: fixed; transform: translate(-50%, -50%); pointer-events: none; z-index: 200; opacity: 0.97; box-shadow: 0 16px 40px -10px rgba(0,0,0,0.7); border-color: var(--accent); }
