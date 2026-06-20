@@ -1,12 +1,13 @@
 name: Build, push & auto-deploy
 
-# Push to main / feat/multi-user → run tests → build image → push to GHCR.
+# Push to main → run tests → build image → push to GHCR.
 # The VPS pulls it itself: a cron (/opt/kairos/auto-deploy.sh, ~every 2 min) runs
 # `docker compose pull && up -d` when a new image lands — no inbound SSH from GitHub's
 # runners (that path proved flaky). The ./data volume persists; only the image swaps.
+# (single-user sunset 2026-06-20 — multi-user promoted to main; main is the only branch)
 on:
   push:
-    branches: [main, feat/multi-user]
+    branches: [main]
   workflow_dispatch:
 
 env:
