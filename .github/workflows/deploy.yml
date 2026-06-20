@@ -1,8 +1,9 @@
-name: Deploy to VPS
+name: Build, push & auto-deploy
 
-# Push to main / feat/multi-user → run tests → build image → push to GHCR →
-# SSH into the VPS and `docker compose pull && up -d`. Mirrors the ibu-kadek-catering
-# pipeline. The ./data volume on the VPS persists across deploys (only the image swaps).
+# Push to main / feat/multi-user → run tests → build image → push to GHCR.
+# The VPS pulls it itself: a cron (/opt/kairos/auto-deploy.sh, ~every 2 min) runs
+# `docker compose pull && up -d` when a new image lands — no inbound SSH from GitHub's
+# runners (that path proved flaky). The ./data volume persists; only the image swaps.
 on:
   push:
     branches: [main, feat/multi-user]
@@ -51,29 +52,5 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  deploy:
-    name: Deploy on VPS
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy (sync compose + pull/restart, retried 3×)
-        env:
-          KEY: ${{ secrets.VPS_SSH_KEY }}
-          HOST: ${{ secrets.VPS_SSH_HOST }}
-          USER: ${{ secrets.VPS_SSH_USER }}
-        run: |
-          printf '%s\n' "$KEY" > key && chmod 600 key
-          H="$USER@$HOST"
-          OPTS="-i key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=10"
-          ok=0
-          for i in 1 2 3; do
-            if scp $OPTS docker-compose.yml "$H:/opt/kairos/docker-compose.yml" \
-               && ssh $OPTS "$H" 'cd /opt/kairos && docker compose pull && docker compose up -d && docker image prune -f'; then
-              echo "✅ deployed on attempt $i"; ok=1; break
-            fi
-            echo "⚠️ attempt $i failed (likely transient SSH timeout / fail2ban) — retrying in 20s"; sleep 20
-          done
-          rm -f key
-          [ "$ok" = 1 ] || { echo "❌ deploy failed after 3 attempts"; exit 1; }
+    # No SSH-deploy job: the VPS cron (/opt/kairos/auto-deploy.sh) pulls the new image
+    # within ~2 min. GitHub only needs to push to GHCR — no inbound connection to the VPS.
