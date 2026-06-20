@@ -483,6 +483,43 @@ def remove_line(path: str, raw: str) -> bool:
     return removed
 
 
+def reorder_section(path: str, bucket_keyword: str, ordered_raws: list[str]) -> bool:
+    """Reorder the task lines inside the section whose heading contains bucket_keyword
+    (e.g. 'active', 'today') so they match ordered_raws — that section's tasks in their
+    new top-to-bottom order. This is how a manual / custom sort is persisted: the file's
+    line order *is* the custom order. Non-task lines (comments, blanks) keep their place;
+    the task lines just permute among their existing slots.
+
+    Only OPEN ('- [ ]') task lines are reordered — completed ('- [x]') lines that linger
+    in a lane keep their slot (the board shows them in the Done column, not the lane, so a
+    column reorder must not move them). Returns False without writing if ordered_raws isn't
+    an exact permutation of the section's open task lines (guards against dropping or
+    duplicating a task) or the section is missing; returns True (no write) when already
+    in that order."""
+    targets = [r.strip() for r in ordered_raws]
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    start = next((i for i, ln in enumerate(lines)
+                  if ln.startswith("## ") and bucket_keyword in ln.lower()), None)
+    if start is None:
+        return False
+    end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")),
+               len(lines))
+    slots = []
+    for k in range(start + 1, end):
+        m = TASK_RE.match(lines[k].strip())
+        if m and m.group("done") == " ":        # open tasks only; '[x]' lines stay put
+            slots.append(k)
+    current = [lines[k].strip() for k in slots]
+    if sorted(current) != sorted(targets):       # same task set, just reordered — or refuse
+        return False
+    if current == targets:                        # already arranged — nothing to write
+        return True
+    for k, raw in zip(slots, targets):
+        lines[k] = raw
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
+
+
 def add_company(path: str, name: str) -> bool:
     """Add a company/context to the registry section. Returns False if blank or duplicate."""
     name = name.strip()

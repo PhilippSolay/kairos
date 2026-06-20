@@ -110,7 +110,9 @@ function renderDayEffort(hours) {
   box.innerHTML = `<div class="de-track"><span class="de-fill ${over ? "over" : ""}" style="width:${pct}%"></span></div>`;
 }
 
-// Today screen — the tasks you put in the Today status, top 5 by priority.
+// Today screen — the tasks you put in the Today status, top 5 by priority (or your
+// arranged order under Custom). The order is shared with the Board's Today column.
+let todaySort = localStorage.getItem("kiros.todaySort") || "score";
 function renderToday(data) {
   renderDayEffort(data.todayEffort || 0);
   renderProgress(data.todayProgress, data.todayEffort || 0);
@@ -156,9 +158,10 @@ function renderToday(data) {
   });
 
   const hidden = total - items.length;
+  const arranged = todaySort === "manual" ? "Your arranged order — drag to reorder on the Board. " : "";
   $("#hidden-note").innerHTML = hidden > 0
-    ? `${hidden} more in Today — the top ${items.length} are up. Do #1 first.`
-    : `Do #1 before anything new.`;
+    ? `${arranged}${hidden} more in Today — the top ${items.length} are up. Do #1 first.`
+    : `${arranged}Do #1 before anything new.`;
 }
 
 // --- Manage (the dense workhorse) ------------------------------------------
@@ -897,7 +900,7 @@ function renderBars(boxSel, rows, fill) {
 
 // --- Actions ----------------------------------------------------------------
 async function load() {
-  const data = await api("/api/board");
+  const data = await api("/api/board?todaySort=" + encodeURIComponent(todaySort));
   renderToday(data);
 }
 
@@ -1211,8 +1214,8 @@ async function updateTaskImpUrg(t, importance, urgency) {
 }
 
 // --- Board (kanban by status) ----------------------------------------------
-const boardFilter = { company: "", sort: "score", dir: -1, q: "" };
-const BOARD_SORT = [["score", "Priority"], ["due", "Deadline"], ["company", "Company"]];
+const boardFilter = { company: "", sort: localStorage.getItem("kiros.boardSort") || "score", dir: -1, q: "" };
+const BOARD_SORT = [["score", "Priority"], ["due", "Deadline"], ["company", "Company"], ["manual", "Custom"]];
 const BOARD_LANES = ["parking", "inbox", "active", "today", "done"];  // column order; "done" is the [x] flag (Delegated hidden for now)
 
 // Feather-style icon per sort dimension — the toggle shows the active one (icons only).
@@ -1220,23 +1223,28 @@ const SORT_ICONS = {
   score: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
   due: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
   company: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  manual: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
 };
 // Icon-only sort control: toggle = active dimension's icon + direction; menu = icon + label per option.
 function buildSortDD(sel, options, state) {
   const dir = state.dir === -1 ? "↓" : "↑";
+  const hasDir = (key) => key !== "manual";   // Custom is file order — no asc/desc
   const menu = $(sel + " .mg-dd-menu");
   menu.innerHTML = options.map(([key, label]) => {
     const on = state.sort === key;
-    return `<button type="button" class="mg-dd-opt sort-opt${on ? " on" : ""}" role="option" aria-selected="${on}" data-sort="${key}"><span class="sort-glyph" aria-hidden="true">${SORT_ICONS[key] || ""}</span><span class="sort-opt-label">${label}</span>${on ? `<span class="sort-dir">${dir}</span>` : ""}</button>`;
+    return `<button type="button" class="mg-dd-opt sort-opt${on ? " on" : ""}" role="option" aria-selected="${on}" data-sort="${key}"><span class="sort-glyph" aria-hidden="true">${SORT_ICONS[key] || ""}</span><span class="sort-opt-label">${label}</span>${on && hasDir(key) ? `<span class="sort-dir">${dir}</span>` : ""}</button>`;
   }).join("");
   const cur = options.find(([k]) => k === state.sort);
   const tog = $(sel + " .mg-dd-toggle");
-  tog.innerHTML = `<span class="sort-glyph" aria-hidden="true">${SORT_ICONS[state.sort] || ""}</span><span class="sort-dir" aria-hidden="true">${dir}</span>`;
-  tog.title = "Sort: " + (cur ? cur[1] : "Sort") + " " + dir;
+  const togDir = hasDir(state.sort) ? `<span class="sort-dir" aria-hidden="true">${dir}</span>` : "";
+  tog.innerHTML = `<span class="sort-glyph" aria-hidden="true">${SORT_ICONS[state.sort] || ""}</span>${togDir}`;
+  tog.title = "Sort: " + (cur ? cur[1] : "Sort") + (hasDir(state.sort) ? " " + dir : "");
 }
 function setBoardSort(key) {
-  if (boardFilter.sort === key) boardFilter.dir *= -1;
+  if (key === "manual") boardFilter.sort = "manual";       // Custom = file order, no direction
+  else if (boardFilter.sort === key) boardFilter.dir *= -1;
   else { boardFilter.sort = key; boardFilter.dir = DEFAULT_DIR[key] || 1; }
+  localStorage.setItem("kiros.boardSort", boardFilter.sort);  // remember the arrangement across reloads
   buildSortDD("#bd-sort", BOARD_SORT, boardFilter);
   renderBoard();
 }
@@ -1255,7 +1263,8 @@ function boardCard(t) {
 
 // Move a task to another status by drag-drop. "done" column → complete (logs Stats);
 // any lane → rebuild the task in that lane (clears assignee unless target is Delegated; un-dones if it was done).
-async function moveTask(t, targetLane) {
+// insertIdx (Custom sort only) drops the moved card into that exact slot of the target column.
+async function moveTask(t, targetLane, insertIdx) {
   try {
     if (targetLane === "done") {
       await api("/api/complete", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -1268,8 +1277,14 @@ async function moveTask(t, targetLane) {
         delegate: targetLane === "delegated" ? (t.delegate || "") : "",
         description: t.description || "", url: t.url || "", added: t.added || "", avoid: t.avoid ? "true" : "",
       };
-      await api("/api/task/save", { method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await api("/api/task/save", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fields, lane: targetLane, originalRaw: t.raw, moved: true }) });
+      if (insertIdx != null) {   // place it where it was dropped (server may reformat → use the returned raw)
+        const order = laneRaws(targetLane);   // target's tasks (the moved card isn't here yet)
+        order.splice(insertIdx, 0, (res && res.raw) || t.raw);
+        await api("/api/reorder", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lane: targetLane, order }) });
+      }
     }
     toast("Moved to " + laneLabel(targetLane) + ".");
     loadBoard();
@@ -1277,6 +1292,45 @@ async function moveTask(t, targetLane) {
   } catch (err) {
     toast("Move failed: " + err.message);
   }
+}
+
+// Persist a within-column reorder (Custom sort). `order` = the lane's task raws, new order.
+async function reorderLane(lane, order) {
+  try {
+    await api("/api/reorder", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lane, order }) });
+    loadBoard();
+    load();   // Today mirrors the Board's Today column — keep it fresh
+  } catch (err) {
+    toast("Reorder failed: " + err.message);
+  }
+}
+
+// A lane's task raws in current (file) order — the order cards render in under Custom sort.
+function laneRaws(lane) {
+  return mg.tasks.filter((x) => (lane === "done" ? x.done : x.lane === lane && !x.done)).map((x) => x.raw);
+}
+// Insertion index for a drop at vertical position y, among a column's cards (excluding the dragged one).
+function dropIndexIn(col, y) {
+  const cards = [...col.querySelectorAll(".b-card:not(.b-dragging)")];
+  for (let i = 0; i < cards.length; i++) {
+    const r = cards[i].getBoundingClientRect();
+    if (y < r.top + r.height / 2) return i;
+  }
+  return cards.length;
+}
+// A thin accent line showing where the card will land (Custom sort drag).
+let dropLine = null;
+function hideDropLine() { if (dropLine) { dropLine.remove(); dropLine = null; } }
+function showDropLine(col, y) {
+  hideDropLine();   // remove first so card measurements below are line-free
+  const body = col.querySelector(".board-col-body");
+  if (!body) return;
+  const cards = [...body.querySelectorAll(".b-card:not(.b-dragging)")];
+  let ref = null;
+  for (const c of cards) { const r = c.getBoundingClientRect(); if (y < r.top + r.height / 2) { ref = c; break; } }
+  dropLine = el("div", "b-drop-line");
+  body.insertBefore(dropLine, ref);   // ref null → appended at the end
 }
 
 // Pointer-based drag for a board card: mouse drags on move; touch needs a long-press
@@ -1311,6 +1365,11 @@ function makeCardDraggable(card, t) {
       ghost.style.top = ev.clientY + "px";
       const col = colAt(ev.clientX, ev.clientY);
       document.querySelectorAll(".board-col").forEach((c) => c.classList.toggle("drop-on", c === col));
+      // Custom sort: show where the card will slot in within the hovered column.
+      const source = t.done ? "done" : t.lane;
+      if (boardFilter.sort === "manual" && col && col.dataset.lane !== "done" && source !== "done")
+        showDropLine(col, ev.clientY);
+      else hideDropLine();
     };
     const move = (ev) => {
       const far = Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6;
@@ -1332,8 +1391,21 @@ function makeCardDraggable(card, t) {
         const col = colAt(ev.clientX, ev.clientY);
         const target = col && col.dataset.lane;
         const source = t.done ? "done" : t.lane;
-        if (target && target !== source) moveTask(t, target);
+        const manual = boardFilter.sort === "manual";
+        if (target && manual && target !== "done" && source !== "done") {
+          const idx = dropIndexIn(col, ev.clientY);
+          if (target === source) {                 // reorder within the column
+            const order = laneRaws(target).filter((r) => r !== t.raw);
+            order.splice(idx, 0, t.raw);
+            reorderLane(target, order);
+          } else {                                  // move lanes, landing at the dropped slot
+            moveTask(t, target, idx);
+          }
+        } else if (target && target !== source) {
+          moveTask(t, target);
+        }
       }
+      hideDropLine();
       if (ghost) ghost.remove();
       card.classList.remove("b-dragging");
       document.querySelectorAll(".board-col").forEach((c) => c.classList.remove("drop-on"));
@@ -1388,6 +1460,7 @@ function renderBoard() {
     const q = boardFilter.q.toLowerCase();
     tasks = tasks.filter((t) => `${t.title} ${t.frontName || ""} ${t.company || ""} ${t.group || ""} ${t.delegate || ""}`.toLowerCase().includes(q));
   }
+  const manual = boardFilter.sort === "manual";   // Custom: keep KIROS.md file order (the arranged order)
   const cmp = (a, b) => {
     const va = sortValue(a, boardFilter.sort), vb = sortValue(b, boardFilter.sort);
     return (va < vb ? -1 : va > vb ? 1 : 0) * boardFilter.dir;
@@ -1396,9 +1469,10 @@ function renderBoard() {
   BOARD_LANES.forEach((lane) => {
     const col = el("div", "board-col");
     col.dataset.lane = lane;
-    const items = (lane === "done"
+    const items = lane === "done"
       ? tasks.filter((t) => t.done)
-      : tasks.filter((t) => t.lane === lane && !t.done)).sort(cmp);
+      : tasks.filter((t) => t.lane === lane && !t.done);
+    if (!manual) items.sort(cmp);
     const head = el("div", "board-head");
     const labelSpan = el("span", `lane lane-${lane}`, esc(laneLabel(lane)));
     labelSpan.title = "Click to rename";
@@ -1537,6 +1611,17 @@ document.querySelectorAll("#stats-range .seg-btn").forEach((b) => b.onclick = ()
   statsRange = b.dataset.range;
   document.querySelectorAll("#stats-range .seg-btn").forEach((x) => x.classList.toggle("is-active", x === b));
   loadStats().catch((e) => toast("Stats failed: " + e.message));
+});
+
+// Today: Priority ⇄ Custom. Custom shows the Today list in the order arranged on the Board.
+document.querySelectorAll("#today-sort .seg-btn").forEach((b) => {
+  b.classList.toggle("is-active", b.dataset.tsort === todaySort);
+  b.onclick = () => {
+    todaySort = b.dataset.tsort;
+    localStorage.setItem("kiros.todaySort", todaySort);
+    document.querySelectorAll("#today-sort .seg-btn").forEach((x) => x.classList.toggle("is-active", x === b));
+    load().catch((e) => toast("Today failed: " + e.message));
+  };
 });
 
 $("#account-structure").onclick = openStructure;

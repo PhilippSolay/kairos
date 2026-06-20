@@ -10,8 +10,8 @@ import kiros
 from kiros import (DEFAULT_WEIGHTS, Board, Front, Task, add_capture, add_company,
                    add_front, add_task_line, avoidance_boost, deadline_pressure,
                    energy_match, fill_day_plan, focusable, format_task_line, parse_board,
-                   parse_task, rank, remove_front, remove_line, score_task, toggle_task_done,
-                   update_front, rename_company, remove_company)
+                   parse_task, rank, remove_front, remove_line, reorder_section, score_task,
+                   toggle_task_done, update_front, rename_company, remove_company)
 
 TODAY = date(2026, 6, 6)
 W = dict(DEFAULT_WEIGHTS)
@@ -250,6 +250,74 @@ class CreateAndDelete(unittest.TestCase):
         path = self._tmp()
         self.assertTrue(remove_line(path, "- [ ] (CG) existing · est:M"))
         self.assertEqual(parse_board(Path(path).read_text(encoding="utf-8")).sections.get("active", []), [])
+
+
+REORDER_BOARD = """# KIROS
+
+## 🔥 Active set
+- [ ] (CG) one · est:M
+- [ ] (CG) two · est:M
+- [ ] (CG) three · est:M
+
+## 📥 Inbox  (raw capture)
+- [ ] (CG) keep me · est:S
+<!-- a comment that must stay put -->
+"""
+
+
+class ReorderSection(unittest.TestCase):
+    def _tmp(self, text=REORDER_BOARD):
+        fh = tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8")
+        fh.write(text)
+        fh.close()
+        return fh.name
+
+    def _active_titles(self, path):
+        board = parse_board(Path(path).read_text(encoding="utf-8"))
+        return [t.title for t in board.sections["active"]]
+
+    def test_reorders_task_lines_in_place(self):
+        path = self._tmp()
+        new_order = ["- [ ] (CG) three · est:M", "- [ ] (CG) one · est:M", "- [ ] (CG) two · est:M"]
+        self.assertTrue(reorder_section(path, "active", new_order))
+        self.assertEqual(self._active_titles(path), ["three", "one", "two"])
+
+    def test_leaves_other_sections_and_comments_untouched(self):
+        path = self._tmp()
+        reorder_section(path, "active", ["- [ ] (CG) two · est:M", "- [ ] (CG) one · est:M",
+                                        "- [ ] (CG) three · est:M"])
+        text = Path(path).read_text(encoding="utf-8")
+        self.assertIn("<!-- a comment that must stay put -->", text)
+        self.assertEqual([t.title for t in parse_board(text).sections["inbox"]], ["keep me"])
+
+    def test_refuses_when_not_a_permutation(self):
+        path = self._tmp()
+        # missing "three" → would drop a task; must refuse and leave the file alone
+        self.assertFalse(reorder_section(path, "active", ["- [ ] (CG) two · est:M",
+                                                         "- [ ] (CG) one · est:M"]))
+        self.assertEqual(self._active_titles(path), ["one", "two", "three"])
+
+    def test_already_ordered_is_noop_true(self):
+        path = self._tmp()
+        same = ["- [ ] (CG) one · est:M", "- [ ] (CG) two · est:M", "- [ ] (CG) three · est:M"]
+        self.assertTrue(reorder_section(path, "active", same))
+        self.assertEqual(self._active_titles(path), ["one", "two", "three"])
+
+    def test_missing_section_returns_false(self):
+        path = self._tmp()
+        self.assertFalse(reorder_section(path, "parking", ["- [ ] (CG) one · est:M"]))
+
+    def test_reorders_open_tasks_only_leaving_done_lines_put(self):
+        # A completed '[x]' line lingering in a lane must not be part of the reorder
+        # (the board shows it in the Done column) — ordered_raws is open tasks only.
+        text = ("# KIROS\n\n## 🔥 Active set\n"
+                "- [ ] (CG) one · est:M\n- [x] (CG) finished · est:M\n- [ ] (CG) two · est:M\n")
+        path = self._tmp(text)
+        self.assertTrue(reorder_section(path, "active", ["- [ ] (CG) two · est:M",
+                                                        "- [ ] (CG) one · est:M"]))
+        lines = [l for l in Path(path).read_text(encoding="utf-8").splitlines() if l.startswith("- [")]
+        self.assertEqual(lines, ["- [ ] (CG) two · est:M", "- [x] (CG) finished · est:M",
+                                 "- [ ] (CG) one · est:M"])  # done line kept its middle slot
 
 
 class DayPlan(unittest.TestCase):

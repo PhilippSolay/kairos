@@ -326,7 +326,7 @@ def task_dict(task, board, today: date, score=None, lane: str = "", descriptions
 
 
 def board_payload(board, today: date, energy=None, minutes=None, n=TODAY_DEFAULT_N,
-                  descs=None, comps=None) -> dict:
+                  descs=None, comps=None, today_sort="score") -> dict:
     descs = descs or {}
     comps = comps if comps is not None else []
     active = [t for t in board.sections.get("active", []) if kiros.focusable(t)]
@@ -339,8 +339,15 @@ def board_payload(board, today: date, energy=None, minutes=None, n=TODAY_DEFAULT
     plan = kiros.fill_day_plan([t for t, _ in ranked], capacity, effort_done)
     today_pairs, more_pairs = ranked[:len(plan)], ranked[len(plan):]
 
+    # Today screen: the tasks you put in the Today status. Default ranks by priority;
+    # "manual" keeps the file order you arranged on the Board's Today column.
     today_lane_pool = [t for t in board.sections.get("today", []) if kiros.focusable(t)]
-    today_lane_ranked = kiros.rank(today_lane_pool, board, today, energy, minutes)
+    if today_sort == "manual":
+        today_lane_ranked = [(t, kiros.score_task(t, board.fronts.get(t.front),
+                                                  board.weights, today))
+                             for t in today_lane_pool]
+    else:
+        today_lane_ranked = kiros.rank(today_lane_pool, board, today, energy, minutes)
 
     front_counts: dict[str, int] = {}
     for t in active:
@@ -736,9 +743,11 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(parsed.query)
             energy = (q.get("energy") or [None])[0]
             minutes = int(q["time"][0]) if q.get("time") else None
+            today_sort = (q.get("todaySort") or ["score"])[0]
             self._json(board_payload(self._board(uid), date.today(), energy, minutes,
                                      descs=load_descriptions(desc_file(uid)),
-                                     comps=read_completions(done_file(uid))))
+                                     comps=read_completions(done_file(uid)),
+                                     today_sort=today_sort))
         elif path == "/api/tasks":
             self._json(tasks_payload(self._board(uid), date.today(), load_descriptions(desc_file(uid))))
         elif path == "/api/stats":
@@ -982,6 +991,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._task_save(uid, bp, body)
             elif path == "/api/task/delete":
                 self._json({"ok": kiros.remove_line(bp, str(body.get("raw", "")))})
+            elif path == "/api/reorder":
+                # Persist a custom (manual) sort: rewrite a section's task lines in the
+                # given order. `order` = the column's task raws, new top-to-bottom order.
+                lane = str(body.get("lane", ""))
+                order = body.get("order")
+                if lane not in kiros.LANES or not isinstance(order, list) \
+                        or not all(isinstance(r, str) for r in order):
+                    self._json({"ok": False, "error": "bad request"}, 400)
+                else:
+                    self._json({"ok": kiros.reorder_section(bp, lane, order)})
             elif path == "/api/company/save":
                 name = str(body.get("name", "")).strip()
                 self._json({"ok": bool(name) and kiros.add_company(bp, name)})
