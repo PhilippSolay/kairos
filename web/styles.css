@@ -365,6 +365,20 @@ button.ghost.done:hover { border-color: var(--done); color: var(--done); }
 button.ghost.danger { color: var(--circle); margin-left: auto; }
 button.ghost.danger:hover { border-color: var(--circle); }
 
+/* Destructive confirm dialog — layered above the structure panel, red action */
+.confirm-layer { z-index: 120; }
+.confirm-card { width: min(420px, 100%); gap: 14px; }
+.confirm-msg { font-size: 14px; line-height: 1.55; color: var(--muted); }
+.confirm-msg strong { color: var(--text); font-weight: 600; }
+.confirm-actions { justify-content: flex-end; }
+button.btn-danger {
+  background: var(--over); color: #fff; border: 0; font-family: inherit; font-weight: 600;
+  font-size: 15px; padding: 13px 22px; border-radius: 12px; cursor: pointer;
+  transition: transform 0.12s var(--ease), filter 0.2s var(--ease);
+}
+button.btn-danger:hover { filter: brightness(1.08); }
+button.btn-danger:active { transform: scale(0.97); }
+
 /* ---- Structure (companies & projects) ---- */
 .mg-struct { padding: 10px 14px; font-size: 14px; }
 .struct-addco { display: flex; gap: 8px; margin-bottom: 6px; }

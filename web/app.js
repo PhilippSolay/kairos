@@ -1047,17 +1047,52 @@ function renameCompany(oldName, newName) {
   if (icons[oldName]) { icons[newName] = icons[oldName]; delete icons[oldName]; uiPrefs.companyIcons = icons; saveUiPrefs({ companyIcons: icons }); }
   structurePost("/api/company/rename", { old: oldName, new: newName }, "Company renamed.");
 }
-function removeCompany(name) {
-  // Cascading delete (company + all its categories) — require typing the name so a
-  // reflexive "OK" can't wipe it. Tasks keep their codes; backups stay recoverable.
+// Promise-based replacement for window.confirm on irreversible actions: clear
+// copy, a red action button, and Cancel focused by default — so a reflexive
+// Enter or click can't fire the destructive path. Resolves true only on Remove.
+function confirmDanger({ title, message, confirmLabel = "Remove" }) {
+  return new Promise((resolve) => {
+    const root = $("#confirm");
+    const okBtn = $("#confirm-ok");
+    const cancelBtn = $("#confirm-cancel");
+    const scrim = root.querySelector(".editor-scrim");
+    $("#confirm-title").textContent = title;
+    $("#confirm-msg").innerHTML = message;            // caller escapes dynamic values via esc()
+    okBtn.textContent = confirmLabel;
+    let settled = false;
+    const close = (val) => {
+      if (settled) return;
+      settled = true;
+      root.hidden = true;
+      okBtn.onclick = cancelBtn.onclick = scrim.onclick = null;
+      document.removeEventListener("keydown", onKey);
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === "Escape") close(false); };
+    okBtn.onclick = () => close(true);
+    cancelBtn.onclick = () => close(false);
+    scrim.onclick = () => close(false);
+    document.addEventListener("keydown", onKey);
+    root.hidden = false;
+    cancelBtn.focus();                                // safe default — not the red button
+  });
+}
+
+async function removeCompany(name) {
+  // Cascading delete (company + all its categories). The styled red-button
+  // confirm spells out the consequences; tasks keep their codes, backups recover.
   const projects = (mg.fronts || []).filter((f) => f.surface === name);
   const n = projects.length;
-  const lead = n
-    ? `Delete company "${name}" and its ${n} categor${n === 1 ? "y" : "ies"}?\n(${projects.map((f) => f.name).join(", ")})`
-    : `Delete company "${name}"?`;
-  const typed = prompt(`${lead}\n\nTasks keep their codes but lose the category mapping.\n\nType the company name to confirm:`);
-  if (typed === null) return;                                  // cancelled
-  if (typed.trim() !== name.trim()) { toast("Name didn't match — nothing deleted."); return; }
+  const cats = n
+    ? `<br><br>This also removes ${n} categor${n === 1 ? "y" : "ies"}: <strong>${projects.map((f) => esc(f.name)).join(", ")}</strong>.`
+    : "";
+  const ok = await confirmDanger({
+    title: "Remove company?",
+    message: `Remove the company <strong>${esc(name)}</strong> and all of its categories?${cats}`
+      + `<br><br>Tasks keep their codes but lose their category mapping. This can't be undone from the app.`,
+    confirmLabel: "Remove company",
+  });
+  if (!ok) return;
   const icons = { ...(uiPrefs.companyIcons || {}) };
   if (icons[name]) { delete icons[name]; uiPrefs.companyIcons = icons; saveUiPrefs({ companyIcons: icons }); }
   structurePost("/api/company/delete", { name }, "Company removed.");

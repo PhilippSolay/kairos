@@ -424,6 +424,19 @@
     </div>
   </div>
 
+  <!-- Destructive confirmation (styled, red action button) -->
+  <div id="confirm" class="editor confirm-layer" hidden>
+    <div class="editor-scrim"></div>
+    <div class="editor-panel confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+      <div class="editor-head"><h2 id="confirm-title"></h2></div>
+      <p id="confirm-msg" class="confirm-msg"></p>
+      <div class="editor-actions confirm-actions">
+        <button type="button" class="ghost" id="confirm-cancel">Cancel</button>
+        <button type="button" class="btn-danger" id="confirm-ok">Remove</button>
+      </div>
+    </div>
+  </div>
+
   <button id="fab-new" class="fab" type="button" title="New task" aria-label="New task">+</button>
 
   <div id="toast" class="toast"></div>
