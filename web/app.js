@@ -1048,7 +1048,16 @@ function renameCompany(oldName, newName) {
   structurePost("/api/company/rename", { old: oldName, new: newName }, "Company renamed.");
 }
 function removeCompany(name) {
-  if (!confirm(`Remove company "${name}"? Its categories are removed; tasks keep their code but lose the category mapping.`)) return;
+  // Cascading delete (company + all its categories) — require typing the name so a
+  // reflexive "OK" can't wipe it. Tasks keep their codes; backups stay recoverable.
+  const projects = (mg.fronts || []).filter((f) => f.surface === name);
+  const n = projects.length;
+  const lead = n
+    ? `Delete company "${name}" and its ${n} categor${n === 1 ? "y" : "ies"}?\n(${projects.map((f) => f.name).join(", ")})`
+    : `Delete company "${name}"?`;
+  const typed = prompt(`${lead}\n\nTasks keep their codes but lose the category mapping.\n\nType the company name to confirm:`);
+  if (typed === null) return;                                  // cancelled
+  if (typed.trim() !== name.trim()) { toast("Name didn't match — nothing deleted."); return; }
   const icons = { ...(uiPrefs.companyIcons || {}) };
   if (icons[name]) { delete icons[name]; uiPrefs.companyIcons = icons; saveUiPrefs({ companyIcons: icons }); }
   structurePost("/api/company/delete", { name }, "Company removed.");

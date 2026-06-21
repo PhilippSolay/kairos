@@ -151,20 +151,37 @@ def ensure_user_data(uid: str) -> Path:
 
 
 _BOARD_LOCKS: dict = defaultdict(threading.Lock)   # one lock per uid; serializes that user's writes
+BOARD_BACKUPS_KEEP = 50                             # timestamped board snapshots retained per user
+
+
+def _snapshot_board(board: Path) -> None:
+    """Copy the board to a timestamped snapshot under <user>/backups/ before a
+    write, pruning to the last BOARD_BACKUPS_KEEP, and refresh the legacy
+    <board>.bak. Unlike a single rolling .bak, this history survives later
+    writes — so an accidental destructive edit (e.g. deleting a company) stays
+    recoverable even if more edits land afterward."""
+    try:
+        bdir = board.parent / "backups"
+        bdir.mkdir(exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+        shutil.copy2(board, bdir / f"{board.name}.{ts}.bak")
+        shutil.copy2(board, board.parent / (board.name + ".bak"))   # legacy single slot
+        for stale in sorted(bdir.glob(f"{board.name}.*.bak"))[:-BOARD_BACKUPS_KEEP]:
+            stale.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 @contextlib.contextmanager
 def board_guard(uid: str):
-    """Serialize writes to one user's board and snapshot it to <board>.bak first,
-    so concurrent requests (multi-tab / PWA + calendar refresh) can't clobber or
-    truncate KIROS.md. Per-uid, so distinct users never contend."""
+    """Serialize writes to one user's board and snapshot it first, so concurrent
+    requests (multi-tab / PWA + calendar refresh) can't clobber or truncate
+    KIROS.md — and so a destructive edit stays recoverable (see _snapshot_board).
+    Per-uid, so distinct users never contend."""
     with _BOARD_LOCKS[uid]:
         board = board_file(uid)
         if board.exists():
-            try:
-                shutil.copy2(board, board.parent / (board.name + ".bak"))
-            except OSError:
-                pass
+            _snapshot_board(board)
         yield
 
 
