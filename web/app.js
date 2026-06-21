@@ -1215,9 +1215,14 @@ function makeMatrixDraggable(card, t) {
       ev.preventDefault();
       paint(ev);
     };
+    // iOS WebKit ignores preventDefault on pointermove (and honours touch-action only as set at
+    // gesture start), so it scrolls and fires pointercancel mid-drag — "starts dragging then
+    // drops". A non-passive touchmove that preventDefaults once armed is what actually holds it.
+    const blockScroll = (ev) => { if (armed) ev.preventDefault(); };
     const end = (ev, bail) => {
       clearTimeout(lp);
       document.removeEventListener("pointermove", move);
+      document.removeEventListener("touchmove", blockScroll);
       document.removeEventListener("pointerup", up);
       document.removeEventListener("pointercancel", cancel);
       const wasDragging = dragging;
@@ -1235,6 +1240,7 @@ function makeMatrixDraggable(card, t) {
     const up = (ev) => end(ev, false);
     const cancel = () => end(e, true);
     document.addEventListener("pointermove", move, { passive: false });
+    document.addEventListener("touchmove", blockScroll, { passive: false });
     document.addEventListener("pointerup", up);
     document.addEventListener("pointercancel", cancel);
   });
@@ -1425,9 +1431,14 @@ function makeCardDraggable(card, t) {
       ev.preventDefault();
       paint(ev);
     };
+    // iOS WebKit ignores preventDefault on pointermove (and honours touch-action only as set at
+    // gesture start), so it scrolls and fires pointercancel mid-drag — "starts dragging then
+    // drops". A non-passive touchmove that preventDefaults once armed is what actually holds it.
+    const blockScroll = (ev) => { if (armed) ev.preventDefault(); };
     const end = (ev, bail) => {
       clearTimeout(lp);
       document.removeEventListener("pointermove", move);
+      document.removeEventListener("touchmove", blockScroll);
       document.removeEventListener("pointerup", up);
       document.removeEventListener("pointercancel", cancel);
       const wasDragging = dragging;
@@ -1460,6 +1471,7 @@ function makeCardDraggable(card, t) {
     const up = (ev) => end(ev, false);
     const cancel = () => end(e, true);
     document.addEventListener("pointermove", move, { passive: false });
+    document.addEventListener("touchmove", blockScroll, { passive: false });
     document.addEventListener("pointerup", up);
     document.addEventListener("pointercancel", cancel);
   });
