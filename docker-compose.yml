@@ -1,5 +1,5 @@
-# Wired for the solay.cloud VPS (srv1322369): Traefik reverse proxy (traefik-traefik-1)
-# on the external `proxy` network, cert resolver `mytlschallenge` (TLS-ALPN-01).
+# Reverse-proxied by a shared Traefik instance on the external `proxy` network,
+# cert resolver `mytlschallenge` (TLS-ALPN-01). See the VPS Deploy SOP for details.
 # Kairos exposes no host ports — Traefik reaches it over the shared network.
 # MULTI-USER: the app has its own login (signup + cookie sessions) — no Basic Auth.
 # Identity (kiros.db) + per-user boards live in ./data. Convert an existing single-user
