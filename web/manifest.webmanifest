@@ -1,0 +1,15 @@
+{
+  "name": "Kiros",
+  "short_name": "Kiros",
+  "description": "Anti-freeze prioritization — see the few things that matter, hide the rest.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1A1815",
+  "theme_color": "#1A1815",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

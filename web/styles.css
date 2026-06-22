@@ -759,6 +759,24 @@ button.btn-danger:active { transform: scale(0.97); }
   .matrix { height: calc(100vh - 230px); min-height: 360px; }
 }
 
+/* Connection/sync status chip. States via data-state: synced (hidden — no noise
+   when all's well), offline (amber), syncing (spinning), pending (coral — changes
+   waiting to push, Phase 1). Quiet amber: a state, not an error; coral = action. */
+.net-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid transparent; font-family: inherit; cursor: pointer;
+  color: #d8a657; background: rgba(216, 166, 87, 0.12);
+}
+.net-pill:hover { background: rgba(216, 166, 87, 0.22); }
+.net-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.net-pill .net-sync { flex: none; opacity: 0.9; }
+.net-pill[data-state="pending"] { color: var(--accent); background: var(--accent-soft); }
+.net-pill[data-state="pending"]:hover { background: rgba(217, 119, 87, 0.24); }
+.net-pill[data-state="syncing"] .net-sync { animation: net-spin 0.9s linear infinite; }
+.net-pill[hidden] { display: none; }   /* author display:inline-flex overrides the [hidden] attr otherwise */
+@keyframes net-spin { to { transform: rotate(360deg); } }
+
 /* Account menu (top-right) */
 .account { position: relative; margin-left: auto; }
 .account-menu {

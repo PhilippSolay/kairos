@@ -782,6 +782,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == "/sw.js":                                      # version-injected, public
+            self._serve_sw()
+            return
         if Path(path).suffix in PUBLIC_ASSET_EXT:                 # static assets are public
             self._serve_static(path)
             return
@@ -859,13 +862,37 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
             return
         html = target.read_text(encoding="utf-8")
-        for asset in ("app.js", "styles.css", "auth.js", "auth.css", "logo.png", "logo-wt.svg", "apple-touch-icon.png"):
+        for asset in ("app.js", "offline.js", "styles.css", "auth.js", "auth.css", "logo.png", "logo-wt.svg", "apple-touch-icon.png"):
             ref = "/" + asset
             p = WEB_DIR / asset
             if p.exists() and ref in html:
                 v = hashlib.md5(p.read_bytes()).hexdigest()[:8]
                 html = html.replace(ref, "%s?v=%s" % (ref, v))
         self._send(200, html.encode("utf-8"), "text/html")
+
+    def _serve_sw(self) -> None:
+        # Inject the deploy's combined shell md5 into web/sw.js so a change to ANY
+        # shell asset reinstalls the SW (fresh precache, no Cloudflare stale-asset
+        # trap). Mirrors the ?v= cache-bust _serve_web_html does for the page.
+        target = (WEB_DIR / "sw.js").resolve()
+        if WEB_DIR.resolve() not in target.parents or not target.is_file():
+            self._send(404, b"not found", "text/plain")
+            return
+        shell = ("index.html", "app.js", "offline.js", "styles.css",
+                 "manifest.webmanifest", "logo-wt.svg", "logo.png", "apple-touch-icon.png")
+        digest = hashlib.md5()
+        for name in shell:
+            p = WEB_DIR / name
+            if p.exists():
+                digest.update(p.read_bytes())
+        v = digest.hexdigest()[:8]
+        assets = ["/", "/index.html"] + [
+            "/%s?v=%s" % (name, v) for name in
+            ("app.js", "offline.js", "styles.css", "manifest.webmanifest",
+             "logo-wt.svg", "logo.png", "apple-touch-icon.png")]
+        js = target.read_text(encoding="utf-8")
+        js = js.replace("__SW_VERSION__", v).replace("__SW_ASSETS__", json.dumps(assets))
+        self._send(200, js.encode("utf-8"), "text/javascript")
 
     def _serve_ics(self, token: str, query=None) -> None:
         u = STORE.get_user_by_ics_token(token)

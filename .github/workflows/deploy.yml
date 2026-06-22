@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run suite (stdlib-only, no deps)
-        run: python -m unittest test_kiros test_auth test_isolation test_backups test_conflict
+        run: python -m unittest test_kiros test_auth test_isolation test_backups test_conflict test_offline_sw
 
   build-and-push:
     name: Build & push image

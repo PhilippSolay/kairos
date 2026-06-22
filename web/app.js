@@ -18,15 +18,67 @@ function cookie(name) {
 }
 async function api(path, opts) {
   opts = opts || {};
-  if (opts.method && opts.method.toUpperCase() === "POST") {
+  const method = (opts.method || "GET").toUpperCase();
+  if (method === "POST") {
     // Double-submit CSRF: echo the kiros_csrf cookie in a header the server checks.
     opts.headers = Object.assign({ "X-Kiros-CSRF": cookie("kiros_csrf") }, opts.headers || {});
   }
-  const res = await fetch(path, opts);
-  if (res.status === 401) { location.href = "/login"; throw new Error("auth required"); }
-  if (!res.ok) throw new Error(`${path} → ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(path, opts);
+    if (res.status === 401) { location.href = "/login"; throw new Error("auth required"); }
+    if (!res.ok) throw new Error(`${path} → ${res.status}`);
+    const data = await res.json();
+    setNetState(true);                                         // a real response → online
+    if (method === "GET") kirosOffline.snapshotPut(path, data);  // remember for offline (best-effort)
+    return data;
+  } catch (err) {
+    // Network failure on a GET → serve the last snapshot so the app still opens offline.
+    if (method === "GET" && isOfflineError(err)) {
+      const cached = await kirosOffline.snapshotGet(path);
+      if (cached !== null) { setNetState(false); return cached; }
+    }
+    throw err;
+  }
 }
+
+// A rejected fetch (TypeError) — or a known-offline navigator — means unreachable.
+function isOfflineError(err) {
+  return err instanceof TypeError || !navigator.onLine;
+}
+
+// Header status chip. States: synced (hidden — no noise when all's well),
+// offline, syncing, pending ("N to sync", Phase 1). Synced is invisible by design.
+let netOnline = true;
+function setNetState(online) {
+  netOnline = online;
+  const pill = document.getElementById("net-pill");
+  if (!pill) return;
+  pill.dataset.state = online ? "synced" : "offline";
+  pill.hidden = online;
+  const label = pill.querySelector(".net-label");
+  if (label) label.textContent = online ? "Synced" : "Offline";
+}
+
+// Re-render the open screen — each loader re-fetches, and the first successful
+// GET flips us back online via api(). Used on reconnect and on a manual tap.
+function reloadActiveView() { switchView(viewFromHash()); }
+
+// Tap the chip to retry now. Spin while probing; a success hides the chip and
+// refreshes the screen, a failure restores the offline state. (In Phase 1 this
+// also flushes the write outbox — same control, richer job.)
+async function retrySync() {
+  const pill = document.getElementById("net-pill");
+  if (netOnline || !pill) { reloadActiveView(); return; }
+  pill.dataset.state = "syncing";
+  try { await api("/api/me"); } catch (e) { /* still offline */ }
+  if (netOnline) reloadActiveView();
+  else pill.dataset.state = "offline";
+}
+
+window.addEventListener("offline", () => setNetState(false));
+window.addEventListener("online", () => { setNetState(true); reloadActiveView(); });
+const netPillEl = document.getElementById("net-pill");
+if (netPillEl) netPillEl.addEventListener("click", retrySync);
 const isWebUrl = (u) => /^https?:\/\//i.test(u || "");   // a real, clickable source link — not a local description key
 
 let nowChoice = { energy: null, time: "" };
@@ -2326,3 +2378,11 @@ initOnboarding();
 load().catch((err) => toast("Could not reach Kiros: " + err.message));
 loadManage().catch((err) => toast("Manage failed: " + err.message));  // populates mg (for the FAB/editor on any view)
 switchView(viewFromHash());  // open the screen named in the URL hash (defaults to Board)
+
+// PWA: register the shell service worker (lets the installed app open offline)
+// and ask the browser to keep our cache. Both best-effort — Kiros works without.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
+kirosOffline.requestPersist();
+if (!navigator.onLine) setNetState(false);  // reflect a cold offline start in the pill
