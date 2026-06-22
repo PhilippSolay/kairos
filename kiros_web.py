@@ -493,7 +493,7 @@ def _vevent(day, task, front, descs) -> list:
     note = descs.get(task.url, "") if task.url else ""
     if note:
         parts.append(note)
-    if task.url:
+    if task.url and task.url.startswith(("http://", "https://")):   # only real web links; not local desc keys
         parts.append(task.url)
     company = (front.surface if front else "") or "Kiros"
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -1088,18 +1088,23 @@ class Handler(BaseHTTPRequestHandler):
         raw = str(body.get("raw", ""))
         done = bool(body.get("done", True))
         t = kiros.parse_task(raw)
-        removed = kiros.remove_line(bp, raw)
+        # Only flip the checkbox if the exact source line is still present. If it's
+        # gone — already completed/edited in another tab, or a double-fire — adding a
+        # fresh line would CLONE the task, so report the stale no-op instead.
+        if not kiros.remove_line(bp, raw):
+            self._json({"ok": False, "stale": True})
+            return
         new_line = (raw.replace("[ ]", "[x]", 1) if done
                     else raw.replace("[x]", "[ ]", 1).replace("[X]", "[ ]", 1)).strip()
         kiros.add_task_line(bp, "done" if done else "active", new_line)
-        if removed and done and t:
+        if done and t:
             front = self._board(uid).fronts.get(t.front)
             log_completion(done_file(uid), {
                 "date": date.today().isoformat(),
                 "ts": datetime.now().isoformat(timespec="seconds"),
                 "title": t.title, "front": t.front,
                 "company": front.surface if front else "", "est": t.est})
-        self._json({"ok": removed})
+        self._json({"ok": True})
 
     def _task_save(self, uid: str, bp: str, body: dict) -> None:
         task = task_from_fields(body.get("fields", {}))
@@ -1108,17 +1113,34 @@ class Handler(BaseHTTPRequestHandler):
             return
         lane = "delegated" if task.delegate else (body.get("lane") or "active")
         task = dataclasses.replace(task, done=(lane == "done"))
+        # The description sidecar is keyed by URL (built for imported tasks). A manually
+        # created task has no URL, so its notes would be dropped. Give a URL-less task that
+        # carries notes a stable local key so the description persists — it round-trips as
+        # `url:` meta; the client echoes it back so the key stays stable across edits, and
+        # the UI only treats real http(s) URLs as clickable "source" links.
+        desc_text = str(body.get("fields", {}).get("description", "") or "")
+        if desc_text.strip() and not task.url:
+            task = dataclasses.replace(task, url="kiros:local:" + os.urandom(8).hex())
         line = kiros.format_task_line(task)
         original = body.get("originalRaw")
         moved = bool(body.get("moved")) or bool(task.delegate)
-        if original and not moved and kiros.replace_line(bp, str(original), line):
-            pass
-        else:
-            if original:
-                kiros.remove_line(bp, str(original))
+        # An edit/move targets an EXISTING line (originalRaw). If that line is gone
+        # — edited, moved, completed, or deleted in another tab, or a double-fire —
+        # adding a fresh line would DUPLICATE the task. So only a genuine create (no
+        # originalRaw) adds unconditionally; a stale edit/move is reported, not cloned.
+        if not original:
+            kiros.add_task_line(bp, lane, line)                  # brand-new task
+        elif not moved:
+            if not kiros.replace_line(bp, str(original), line):  # in-place edit
+                self._json({"ok": False, "stale": True}, 409)
+                return
+        else:                                                    # lane / delegate move
+            if not kiros.remove_line(bp, str(original)):
+                self._json({"ok": False, "stale": True}, 409)
+                return
             kiros.add_task_line(bp, lane, line)
-        save_description(desc_file(uid), task.url, str(body.get("fields", {}).get("description", "")))
-        self._json({"ok": True, "raw": line})
+        save_description(desc_file(uid), task.url, desc_text)
+        self._json({"ok": True, "raw": line, "url": task.url})   # echo url so a local key stays stable across edits
 
     def _project_save(self, uid: str, bp: str, body: dict) -> None:
         name = str(body.get("name", "")).strip()

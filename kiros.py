@@ -387,10 +387,22 @@ def cmd_review(board: Board, args, today: date) -> None:
     print("\n  For each: do / delegate / defer / DELETE. Be ruthless. Then set the active 3.\n")
 
 
+_ONELINE = re.compile(r"[\r\n\t]+")
+
+
+def _oneline(s: str) -> str:
+    """Collapse newlines/tabs/CR to a single space. The board is one task per line;
+    an embedded newline would split a task into a corrupt fragment (losing its meta)
+    and orphan the tail. This is the write-boundary guard against that — the UI's
+    single-line <input> already strips newlines, but a crafted/buggy API call must
+    not be able to corrupt the file either ("never trust external data")."""
+    return _ONELINE.sub(" ", s or "")
+
+
 def add_capture(path: str, text: str) -> bool:
     """Append a raw capture under the Inbox heading. Returns False if there's nothing to add.
     Shared by the CLI `capture` command and the web UI — the engine owns the file format."""
-    text = text.strip()
+    text = _oneline(text).strip()
     if not text:
         return False
     lines = Path(path).read_text(encoding="utf-8").splitlines()
@@ -410,8 +422,11 @@ def format_task_line(task: Task) -> str:
     """Inverse of parse_task — render a Task back to a KIROS.md line. Used by the web UI
     for create/edit so the file stays the single source of truth (round-trips with parse_task)."""
     box = "[x]" if task.done else "[ ]"
-    title = task.title.replace("·", "-").strip()  # '·' is the meta separator; keep it out of titles
-    head = f"- {box} ({task.front}) {title}" if task.front else f"- {box} {title}"
+    # Keep every value single-line: '·' is the meta separator, and \n/\r/\t would
+    # split the row. _oneline() is the corruption guard at the write boundary.
+    title = _oneline(task.title).replace("·", "-").strip()
+    front = _oneline(task.front).strip()
+    head = f"- {box} ({front}) {title}" if front else f"- {box} {title}"
     meta: list[str] = []
     if task.importance is not None:
         meta.append(f"importance:{task.importance}")
@@ -423,11 +438,11 @@ def format_task_line(task: Task) -> str:
     if task.energy:
         meta.append(f"energy:{task.energy}")
     if task.group:
-        meta.append(f"group:{task.group}")
+        meta.append(f"group:{_oneline(task.group).replace('·', '-').strip()}")
     if task.delegate:
-        meta.append(f"delegate:{task.delegate}")
+        meta.append(f"delegate:{_oneline(task.delegate).replace('·', '-').strip()}")
     if task.url:
-        meta.append(f"url:{task.url}")
+        meta.append(f"url:{_oneline(task.url).replace('·', '-').strip()}")
     if task.added:
         meta.append(f"added:{task.added.isoformat()}")
     if task.avoid:

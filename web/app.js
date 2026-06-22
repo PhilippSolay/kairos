@@ -27,6 +27,7 @@ async function api(path, opts) {
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json();
 }
+const isWebUrl = (u) => /^https?:\/\//i.test(u || "");   // a real, clickable source link — not a local description key
 
 let nowChoice = { energy: null, time: "" };
 
@@ -456,7 +457,7 @@ function cardBody(t, showStatus) {
   const section = (t.frontName || t.front || "").split("—")[0].trim();
   const crumbs = [t.company, section].filter(Boolean).map(esc).join(" · ");
   const flag = t.avoidance > 0.3 ? ` <span class="t-flag" title="circling back">↻</span>` : "";
-  const link = t.url ? ` <a class="t-link" href="${esc(t.url)}" target="_blank" rel="noopener" title="Open source ↗" onclick="event.stopPropagation()">↗</a>` : "";
+  const link = isWebUrl(t.url) ? ` <a class="t-link" href="${esc(t.url)}" target="_blank" rel="noopener" title="Open source ↗" onclick="event.stopPropagation()">↗</a>` : "";
   const proj = t.group ? `<span class="t-proj">${esc(t.group)}</span><span class="t-sep">|</span>` : "";
   const due = t.due ? `<span class="t-due ${overdue}">${esc(relativeDue(t.due, mg.date))}</span>` : "";
   const status = showStatus ? `<span class="lane lane-${t.lane}">${esc(laneLabel(t.lane))}</span>` : "";
@@ -634,7 +635,7 @@ function openEditor(t, rawText) {
   f.avoid.value = t && t.avoid ? "true" : "";
   f.originalRaw.value = t ? t.raw : (rawText ? "- " + rawText : "");
   const src = $("#ed-source");
-  if (t && t.url) { src.hidden = false; src.href = t.url; } else { src.hidden = true; }
+  if (t && isWebUrl(t.url)) { src.hidden = false; src.href = t.url; } else { src.hidden = true; }
   updateDateChips(f.due.value);
   resetDelete();
   $("#ed-saved").textContent = "";
@@ -684,7 +685,7 @@ function autoSave(moved) {
   lastSave = api("/api/task/save", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fields, lane: f.lane.value, originalRaw: f.originalRaw.value || null, moved: !!moved }),
-  }).then((r) => { if (r && r.raw) f.originalRaw.value = r.raw; $("#ed-saved").textContent = "saved ✓"; })
+  }).then((r) => { if (r && r.raw) f.originalRaw.value = r.raw; if (r && r.url !== undefined) f.url.value = r.url; $("#ed-saved").textContent = "saved ✓"; })
     .catch(() => { $("#ed-saved").textContent = "save failed"; });
   return lastSave;
 }
@@ -762,7 +763,7 @@ function addToCalendar() {
   const ymd = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}`;
   const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const uid = `kiros-${ymd}-${calSlug(title)}@kiros.local`;
-  const desc = [f.description.value, f.url.value].filter(Boolean).join("\n\n");
+  const desc = [f.description.value, isWebUrl(f.url.value) ? f.url.value : ""].filter(Boolean).join("\n\n");
   const lines = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kiros//Task//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     "BEGIN:VEVENT", `UID:${uid}`, `DTSTAMP:${stamp}`,
