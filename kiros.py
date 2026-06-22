@@ -695,6 +695,53 @@ def remove_company(path: str, name: str) -> bool:
     return changed
 
 
+def purge_companies(path: str, names) -> int:
+    """Remove the given companies wholesale — registry entries, '### {surface}'
+    headings, their fronts, AND every task that lives under those fronts — in a
+    single rewrite. Used to retire the starter EXAMPLE board once a user sets up
+    their own contexts in onboarding. Unlike remove_company (which keeps tasks
+    but drops their section mapping, orphaning them), this leaves no dangling
+    task lines behind. Returns the number of lines removed.
+
+    `names` is any iterable of company (surface) names; matching is exact after
+    strip. Section headings ('## …') and companies not named are left intact."""
+    targets = {n.strip() for n in names if n and n.strip()}
+    if not targets:
+        return 0
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    # Pass 1: map each front code to its company so task lines — which name only
+    # their code, never the company — can still be matched to a target company.
+    code_company = {}
+    for ln in lines:
+        front = parse_front(ln.strip())
+        if front and front.code:
+            code_company[front.code] = front.surface
+    # Pass 2: drop the targets' registry entries, headings, fronts, and tasks.
+    out, bucket, removed = [], None, 0
+    for ln in lines:
+        stripped = ln.strip()
+        if ln.startswith("## "):
+            bucket = "companies" if ("compan" in ln.lower() and "front" not in ln.lower()) else None
+        if bucket == "companies" and stripped.startswith("- ") and stripped[2:].strip() in targets:
+            removed += 1
+            continue
+        if stripped.startswith("### ") and stripped[4:].strip() in targets:
+            removed += 1
+            continue
+        front = parse_front(stripped)
+        if front and front.surface in targets:
+            removed += 1
+            continue
+        task = parse_task(stripped)
+        if task and code_company.get(task.front) in targets:
+            removed += 1
+            continue
+        out.append(ln)
+    if removed:
+        Path(path).write_text("\n".join(out) + "\n", encoding="utf-8")
+    return removed
+
+
 def toggle_task_done(path: str, raw: str, done: bool = True) -> bool:
     """Flip a task line's checkbox by exact raw-line match. Returns True if it changed."""
     target = raw.strip()

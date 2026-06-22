@@ -11,7 +11,8 @@ from kiros import (DEFAULT_WEIGHTS, Board, Front, Task, add_capture, add_company
                    add_front, add_task_line, avoidance_boost, deadline_pressure,
                    energy_match, fill_day_plan, focusable, format_task_line, parse_board,
                    parse_task, rank, remove_front, remove_line, reorder_section, score_task,
-                   toggle_task_done, update_front, rename_company, remove_company)
+                   toggle_task_done, update_front, rename_company, remove_company,
+                   purge_companies)
 
 TODAY = date(2026, 6, 6)
 W = dict(DEFAULT_WEIGHTS)
@@ -413,6 +414,41 @@ class Structure(unittest.TestCase):
         self.assertNotIn("Atmosa", b.companies)
         self.assertNotIn("AT-BIZ", b.fronts)        # its fronts are removed too
         self.assertIn("Private", b.companies)       # other companies untouched
+
+    def test_purge_companies_removes_fronts_and_tasks(self):
+        # purge_companies retires whole companies — registry, heading, fronts AND
+        # their tasks (unlike remove_company, which orphans the tasks). Used to
+        # clear the starter example board once a user adds their own contexts.
+        board = (
+            "# KIROS\n\n"
+            "## 🏢 Companies\n- Acme Studio\n- Personal\n\n"
+            "## 🎯 Fronts\n"
+            "### Acme Studio\n- [AS-DES] Design · importance:3 · surface:Acme Studio\n"
+            "### Personal\n- [PR-HOME] Home · importance:2 · surface:Personal\n\n"
+            "## 🔥 Active set\n"
+            "- [ ] (AS-DES) example client task · importance:4 · est:1h\n"
+            "- [ ] (PR-HOME) keep me · importance:2 · est:30m\n"
+        )
+        p = self._tmp(text=board)
+        removed = purge_companies(p, ("Acme Studio",))
+        self.assertEqual(removed, 4)   # registry + heading + front + task
+        b = parse_board(Path(p).read_text(encoding="utf-8"))
+        self.assertNotIn("Acme Studio", b.companies)
+        self.assertNotIn("AS-DES", b.fronts)                                  # its front gone
+        titles = [t.title for t in b.sections.get("active", [])]
+        self.assertNotIn("example client task", titles)                       # its task gone too
+        self.assertIn("Personal", b.companies)                               # other company intact
+        self.assertIn("PR-HOME", b.fronts)
+        self.assertIn("keep me", titles)
+        text = Path(p).read_text(encoding="utf-8")
+        self.assertIn("## 🏢 Companies", text)    # section headings survive for re-seeding
+        self.assertIn("## 🎯 Fronts", text)
+
+    def test_purge_companies_noop_when_absent_or_empty(self):
+        p = self._tmp()
+        self.assertEqual(purge_companies(p, ("Nope",)), 0)
+        self.assertEqual(purge_companies(p, ()), 0)
+        self.assertIn("Atmosa", parse_board(Path(p).read_text(encoding="utf-8")).companies)
 
     def test_parse_front_urgency(self):
         b = parse_board("## 🎯 Fronts\n- [X] P · importance:4 · urgency:2 · surface:Atmosa\n")

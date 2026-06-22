@@ -53,7 +53,7 @@ class StaleWriteIntegrity(unittest.TestCase):
         return sum(1 for l in kiros.LANES for t in self._board().sections.get(l, []) if t.title == title)
 
     def _make(self, title, lane="active"):
-        st, resp = self._save({"title": title, "front": "PR-GEN", "importance": 3,
+        st, resp = self._save({"title": title, "front": "PR-HOME", "importance": 3,
                                "urgency": 3, "est": "1h", "added": "2026-06-20"}, lane=lane)
         self.assertTrue(resp.get("ok"), resp)
         return resp["raw"]
@@ -62,10 +62,10 @@ class StaleWriteIntegrity(unittest.TestCase):
     def test_stale_in_place_edit_does_not_duplicate(self):
         raw = self._make("T")
         # someone else edits T in place (the file line changes)
-        self._save({"title": "T", "front": "PR-GEN", "importance": 5, "urgency": 3,
+        self._save({"title": "T", "front": "PR-HOME", "importance": 5, "urgency": 3,
                     "est": "1h", "added": "2026-06-20"}, original=raw)
         # now a second tab edits using the STALE original
-        st, resp = self._save({"title": "T", "front": "PR-GEN", "importance": 1, "urgency": 3,
+        st, resp = self._save({"title": "T", "front": "PR-HOME", "importance": 1, "urgency": 3,
                                "est": "1h", "added": "2026-06-20"}, original=raw)
         self.assertEqual(st, 409)
         self.assertFalse(resp.get("ok"))
@@ -76,7 +76,7 @@ class StaleWriteIntegrity(unittest.TestCase):
         # T gets completed elsewhere (line removed from active)
         self.h._complete(self.uid, self.bp, {"raw": raw, "done": True})
         # second tab tries to MOVE it to parking with the stale (open) raw
-        st, resp = self._save({"title": "M", "front": "PR-GEN", "importance": 3, "urgency": 3,
+        st, resp = self._save({"title": "M", "front": "PR-HOME", "importance": 3, "urgency": 3,
                                "est": "1h", "added": "2026-06-20"}, lane="parking", original=raw, moved=True)
         self.assertEqual(st, 409)
         self.assertEqual(self._count("M"), 1, "stale move resurrected/duplicated the task")
@@ -101,7 +101,7 @@ class StaleWriteIntegrity(unittest.TestCase):
 
     def test_in_place_edit_still_works(self):
         raw = self._make("E")
-        st, resp = self._save({"title": "E", "front": "PR-GEN", "importance": 5, "urgency": 3,
+        st, resp = self._save({"title": "E", "front": "PR-HOME", "importance": 5, "urgency": 3,
                                "est": "1h", "added": "2026-06-20"}, original=raw)
         self.assertTrue(resp.get("ok"))
         self.assertEqual(self._count("E"), 1)
@@ -110,7 +110,7 @@ class StaleWriteIntegrity(unittest.TestCase):
 
     def test_move_still_works(self):
         raw = self._make("Mv")
-        st, resp = self._save({"title": "Mv", "front": "PR-GEN", "importance": 3, "urgency": 3,
+        st, resp = self._save({"title": "Mv", "front": "PR-HOME", "importance": 3, "urgency": 3,
                                "est": "1h", "added": "2026-06-20"}, lane="parking", original=raw, moved=True)
         self.assertTrue(resp.get("ok"))
         self.assertEqual(self._count("Mv"), 1)
@@ -120,7 +120,7 @@ class StaleWriteIntegrity(unittest.TestCase):
 
     # --- description persistence for URL-less (manually-created) tasks ---
     def test_urlless_task_description_persists(self):
-        self.h._task_save(self.uid, self.bp, {"fields": {"title": "Notes", "front": "PR-GEN",
+        self.h._task_save(self.uid, self.bp, {"fields": {"title": "Notes", "front": "PR-HOME",
             "est": "1h", "added": "2026-06-20", "description": "keep these notes"}, "lane": "active"})
         st, resp = self.h.captured
         self.assertTrue(resp.get("ok"))
@@ -129,23 +129,25 @@ class StaleWriteIntegrity(unittest.TestCase):
         self.assertEqual(descs.get(resp["url"]), "keep these notes")  # notes actually persisted
 
     def test_urlless_description_key_stable_across_edits(self):
-        self.h._task_save(self.uid, self.bp, {"fields": {"title": "N", "front": "PR-GEN",
+        self.h._task_save(self.uid, self.bp, {"fields": {"title": "N", "front": "PR-HOME",
             "est": "1h", "added": "2026-06-20", "description": "n1"}, "lane": "active"})
         _, r1 = self.h.captured
         key1, raw1 = r1["url"], r1["raw"]
         # edit in place, echoing the returned url back (as the client now does)
-        self.h._task_save(self.uid, self.bp, {"fields": {"title": "N2", "front": "PR-GEN",
+        self.h._task_save(self.uid, self.bp, {"fields": {"title": "N2", "front": "PR-HOME",
             "est": "1h", "added": "2026-06-20", "url": key1, "description": "n2"}, "lane": "active",
             "originalRaw": raw1})
         _, r2 = self.h.captured
         self.assertEqual(r2["url"], key1, "local key must stay stable across edits")
         descs = web.load_descriptions(web.desc_file(self.uid))
-        local = [k for k in descs if k.startswith("kiros:local:")]
+        # Exclude the seeded "Start here" explainer key — we care that THIS task's
+        # edit didn't leave an orphaned key behind, not about the starter content.
+        local = [k for k in descs if k.startswith("kiros:local:") and k != "kiros:local:welcome"]
         self.assertEqual(len(local), 1, "no orphan description keys accumulate")
         self.assertEqual(descs[key1], "n2")
 
     def test_real_url_task_keeps_its_url(self):
-        self.h._task_save(self.uid, self.bp, {"fields": {"title": "Imported", "front": "PR-GEN",
+        self.h._task_save(self.uid, self.bp, {"fields": {"title": "Imported", "front": "PR-HOME",
             "est": "1h", "added": "2026-06-20", "url": "https://example.com/x", "description": "d"}, "lane": "active"})
         _, r = self.h.captured
         self.assertEqual(r["url"], "https://example.com/x")  # a real URL is never reassigned

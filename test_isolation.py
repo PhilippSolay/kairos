@@ -119,9 +119,9 @@ class TestIsolation(_ServerCase):
                                 {"email": "b@x.co", "name": "B", "password": "password1"},
                                 with_csrf=False)[0], 200)
 
-        # A creates a private task in their starter front (PR-GEN exists in STARTER_BOARD).
+        # A creates a private task in their starter front (PR-HOME exists in STARTER_BOARD).
         status, _ = a.post("/api/task/save",
-                           {"fields": {"title": "SECRET sauna quote", "front": "PR-GEN", "est": "1h"},
+                           {"fields": {"title": "SECRET sauna quote", "front": "PR-HOME", "est": "1h"},
                             "lane": "active"})
         self.assertEqual(status, 200)
 

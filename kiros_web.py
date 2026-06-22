@@ -70,6 +70,16 @@ SESSION_MAX_AGE = 60 * 60 * 24 * 30
 MAX_BODY = 1 << 20                                # reject request bodies larger than 1 MiB
 
 # Per-user starter board, written on first login if the user has no board yet.
+# A new user's first board is pre-filled with a small EXAMPLE set (cleared the
+# moment they add their own contexts in onboarding — see /api/examples/clear).
+# It exists to teach the one thing that isn't obvious: the three levels —
+# Company · Category · Project — and that "Project" flexes by context:
+#   • Acme Studio (an agency) → Project = the CLIENT  (Bluebird Café, across two categories)
+#   • Northwind  (a product)  → Project = an INITIATIVE (Onboarding v2 / Growth)
+#   • Personal                → no Project — two levels are plenty
+# Tasks are deliberately date-free (no added:/due:) so they never drift stale or
+# overdue for someone who signs up months from now. The "Start here" task carries
+# a stable local description key (seeded in STARTER_DESCRIPTIONS below).
 STARTER_BOARD = """# KIROS
 
 ## ⚙️ Tuning
@@ -85,25 +95,71 @@ STARTER_BOARD = """# KIROS
 - day_capacity = 6
 
 ## 🏢 Companies
+- Acme Studio
+- Northwind
 - Personal
 
 ## 🎯 Fronts
 
+### Acme Studio
+- [AS-DES] Design · importance:3 · surface:Acme Studio
+- [AS-SALE] Sales · importance:4 · surface:Acme Studio
+
+### Northwind
+- [NW-APP] App · importance:4 · surface:Northwind
+- [NW-MKT] Marketing · importance:3 · surface:Northwind
+
 ### Personal
-- [PR-GEN] General · importance:3 · surface:Personal
+- [PR-HLTH] Health · importance:3 · surface:Personal
+- [PR-HOME] Home · importance:2 · surface:Personal
 
 ## 🔥 Active set
+- [ ] (PR-HOME) 👋 Start here — tap to see how Kiros works · importance:3 · urgency:2 · est:30m · url:kiros:local:welcome
+- [ ] (AS-DES) Send logo concepts to Bluebird Café · importance:4 · urgency:5 · est:1h · group:Bluebird Café
+- [ ] (NW-APP) Wire up the signup screen · importance:4 · urgency:4 · est:2h · group:Onboarding v2
 
 ## ✅ Today
+- [ ] (AS-SALE) Follow up on the Bluebird quote · importance:5 · urgency:4 · est:30m · group:Bluebird Café
+- [ ] (PR-HLTH) Book the dentist · importance:3 · urgency:3 · est:30m
 
 ## 🤝 Delegated
 
 ## 📥 Inbox
+- [ ] (PR-HOME) Rearrange the home office · importance:2 · urgency:1 · est:1h
 
 ## 🅿️ Parking lot
+- [ ] (NW-MKT) Someday: start a newsletter · importance:2 · urgency:1 · est:4h · group:Growth
 
 ## 🏁 Done
 """
+
+# The companies seeded above. The onboarding finish step purges these once the
+# user has added contexts of their own (single source of truth for that cleanup).
+EXAMPLE_COMPANIES = ("Acme Studio", "Northwind", "Personal")
+
+# Seeded alongside STARTER_BOARD: the description shown when the user taps the
+# "Start here" card. Keyed by that task's stable local url. This is the in-app
+# explainer for the Company/Category/Project model and how priority is scored.
+STARTER_DESCRIPTIONS = {
+    "kiros:local:welcome": (
+        "Welcome to Kiros — a calm filter for the few things that matter, not another endless list.\n\n"
+        "This board is pre-filled with examples. Poke at them to see how it works. They clear "
+        "themselves the moment you add your own contexts in setup — or remove them anytime in "
+        "Settings ⚙ (open a company, Remove).\n\n"
+        "THREE LEVELS organise everything — you can see them on the line of each card:\n"
+        "• Company — an area of work or life (Acme Studio, Northwind, Personal)\n"
+        "• Category — a type of work inside it (Design, App, Health)\n"
+        "• Project — optional, and it flexes by context:\n"
+        "   – agency? Project = the client — see “Bluebird Café”, which spans Design and Sales\n"
+        "   – product? Project = an initiative — see “Onboarding v2” under Northwind\n"
+        "   – personal? Skip it — Company + Category is plenty.\n\n"
+        "PRIORITY ranks for you from three numbers — spread them out or nothing sorts:\n"
+        "• Importance 1–5 · does this move something that matters?\n"
+        "• Urgency 1–5 · the clock & other people — not your stress.\n"
+        "• Effort 30m–8h · small + important floats to the top.\n\n"
+        "That's the whole idea. Keep what's real, delete the rest."
+    ),
+}
 
 CONTENT_TYPES = {".html": "text/html", ".css": "text/css", ".js": "text/javascript",
                  ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon",
@@ -147,6 +203,10 @@ def ensure_user_data(uid: str) -> Path:
     board = board_file(uid)
     if not board.exists():
         board.write_text(STARTER_BOARD, encoding="utf-8")
+        # Seed the "Start here" card's explainer alongside the example board.
+        descs = desc_file(uid)
+        if not descs.exists():
+            descs.write_text(json.dumps(STARTER_DESCRIPTIONS, indent=2, ensure_ascii=False), encoding="utf-8")
     return board
 
 
@@ -1025,6 +1085,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": kiros.rename_company(bp, str(body.get("old", "")), str(body.get("new", "")))})
             elif path == "/api/company/delete":
                 self._json({"ok": kiros.remove_company(bp, str(body.get("name", "")))})
+            elif path == "/api/examples/clear":
+                # Retire the seeded example companies + their tasks once the user
+                # has their own contexts (called from the onboarding finish step).
+                removed = kiros.purge_companies(bp, EXAMPLE_COMPANIES)
+                self._json({"ok": True, "removed": removed})
             elif path == "/api/project/save":
                 self._project_save(uid, bp, body)
             elif path == "/api/project/delete":

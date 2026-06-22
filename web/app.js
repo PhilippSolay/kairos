@@ -2059,6 +2059,13 @@ function showOnboarding() {
   renderOnbStep();
 }
 async function finishOnboarding() {
+  // If the user set up their own contexts, retire the seeded example board FIRST,
+  // so their companies/sections are created on a clean slate — no example/own name
+  // collisions, no tasks orphaned by a half-removed company. Skipping onboarding
+  // (no own contexts) leaves the examples in place to learn from.
+  if (onbCompanies.length) {
+    await api("/api/examples/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+  }
   // Create contexts then sections (a section needs its company to exist first), then store icons.
   // Everything is collected locally until here so rows stay freely editable during onboarding.
   for (const c of onbCompanies) {
