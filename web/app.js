@@ -941,10 +941,28 @@ async function runNow() {
 let toastTimer;
 function toast(msg) {
   const t = $("#toast");
+  t.classList.remove("toast-action");
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+// Toast carrying a single tap-action (e.g. Undo). Stays a little longer so the action is reachable.
+function toastAction(msg, label, fn) {
+  const t = $("#toast");
+  t.innerHTML = "";
+  t.appendChild(el("span", "toast-msg", esc(msg)));
+  const btn = el("button", "toast-act", esc(label));
+  btn.type = "button";
+  btn.onclick = () => {
+    t.classList.remove("show", "toast-action");
+    clearTimeout(toastTimer);
+    try { fn(); } catch (err) { toast("Couldn’t undo: " + err.message); }
+  };
+  t.appendChild(btn);
+  t.classList.add("show", "toast-action");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show", "toast-action"), 5200);
 }
 
 // --- Wiring -----------------------------------------------------------------
@@ -1305,11 +1323,100 @@ async function loadBoard() {
   buildSortDD("#bd-sort", BOARD_SORT, boardFilter);
   renderBoard();
 }
+// --- Completing a board card (hover Done button + swipe-right) ---------------
+// Swipe geometry: arm on a clear rightward intent, commit past the threshold.
+const SWIPE_ARM_PX = 8;      // horizontal travel before we treat the gesture as a swipe (not scroll/drag)
+const SWIPE_DONE_PX = 76;    // travel needed to commit the completion
+const SWIPE_MAX_PX = 132;    // how far the card follows the finger
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const prefersReducedMotion = () =>
+  !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+// The calm part: collapse the card's slot so neighbours close the gap. Resolves when settled.
+function collapseCard(card) {
+  return new Promise((resolve) => {
+    if (prefersReducedMotion()) { resolve(); return; }
+    const h = card.getBoundingClientRect().height;
+    card.style.maxHeight = h + "px";
+    card.classList.add("b-collapsing");
+    void card.offsetHeight;                                   // commit the start height before transitioning
+    requestAnimationFrame(() => { card.style.maxHeight = "0px"; card.style.opacity = "0"; });
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; resolve(); };
+    card.addEventListener("transitionend", (e) => { if (e.propertyName === "max-height") finish(); }, { once: true });
+    setTimeout(finish, 520);                                  // never hang if transitionend is missed
+  });
+}
+
+// Complete a task from the board: animate the card out, hit the API, refresh, offer Undo.
+// mode: "button" (check + settle) | "swipe" (flick right toward Done, then settle).
+async function completeCard(card, t, mode) {
+  if (card.dataset.completing === "1") return;               // guard against swipe + click double-fire
+  card.dataset.completing = "1";
+  if (navigator.vibrate) navigator.vibrate(18);
+  if (!prefersReducedMotion()) {
+    if (mode === "swipe") {
+      card.classList.add("b-swipe-commit");
+      card.style.transform = "translateX(115%)";   // fly right, toward the Done column
+      await sleep(150);
+    } else {
+      await sleep(170);                                       // let the check-pop land before the card leaves
+    }
+  }
+  try {
+    await api("/api/complete", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw: t.raw, done: true }) });
+    await collapseCard(card);
+    toastAction("Done. One less open loop.", "Undo", () => undoComplete(t));
+    loadBoard();
+    load();                                                   // Today mirrors the board's Today column
+  } catch (err) {
+    card.dataset.completing = "";
+    card.classList.remove("b-swipe-commit");
+    card.style.transform = "";
+    toast("Couldn’t complete: " + err.message);
+    loadBoard();
+  }
+}
+
+// Reverse a just-completed task. Backend un-done returns it to "Next Up" (active lane).
+async function undoComplete(t) {
+  try {
+    const doneRaw = t.raw.replace("[ ]", "[x]").replace("[X]", "[x]");
+    await api("/api/complete", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw: doneRaw, done: false }) });
+    toast("Brought back.");
+    loadBoard();
+    load();
+  } catch (err) {
+    toast("Undo failed: " + err.message);
+    loadBoard();
+  }
+}
+
 function boardCard(t) {
   const card = el("div", "b-card");
   card.innerHTML = cardBody(t, false);   // status hidden on the board — the column IS the status
+  if (!t.done) addDoneButton(card, t);   // hover-reveal complete affordance (desktop); swipe covers touch
   makeCardDraggable(card, t);
   return card;
+}
+
+// A circular "mark done" control, revealed on card hover. Click → check + settle into Done.
+function addDoneButton(card, t) {
+  card.classList.add("has-done");
+  const btn = el("button", "b-done-btn");
+  btn.type = "button";
+  btn.title = "Mark done";
+  btn.setAttribute("aria-label", "Mark done");
+  btn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.4L19 7"/></svg>`;
+  btn.addEventListener("pointerdown", (e) => e.stopPropagation());   // don't start a card drag / tap-to-edit
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    btn.classList.add("checked");
+    completeCard(card, t, "button");
+  });
+  card.appendChild(btn);
 }
 
 // Move a task to another status by drag-drop. "done" column → complete (logs Stats);
@@ -1392,7 +1499,19 @@ function makeCardDraggable(card, t) {
     const isTouch = e.pointerType === "touch";
     const id = e.pointerId, sx = e.clientX, sy = e.clientY;
     let dragging = false, armed = !isTouch, ghost = null;
+    let swiping = false, swiped = false;            // swipe-right-to-complete (touch, non-Done cards only)
+    const canSwipe = isTouch && !t.done;
     const lp = isTouch ? setTimeout(() => { armed = true; card.style.touchAction = "none"; if (navigator.vibrate) navigator.vibrate(12); }, 250) : 0;
+    const swipeTo = (dx) => {
+      const d = Math.min(SWIPE_MAX_PX, Math.max(0, dx));
+      card.style.transform = "translateX(" + d + "px)";
+      const p = Math.min(1, d / SWIPE_DONE_PX);
+      card.style.setProperty("--swipe-p", p.toFixed(3));
+      const ready = d >= SWIPE_DONE_PX;
+      if (ready !== swiped && navigator.vibrate) navigator.vibrate(ready ? 14 : 6);   // tick crossing the line
+      swiped = ready;
+      card.classList.toggle("b-swipe-ready", ready);
+    };
 
     const colAt = (x, y) => {
       const vis = ghost && ghost.style.display;
@@ -1423,9 +1542,23 @@ function makeCardDraggable(card, t) {
       else hideDropLine();
     };
     const move = (ev) => {
-      const far = Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6;
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      // Swipe-right to complete (toward the Done column): a clear rightward flick, before the long-press arms.
+      if (canSwipe && !dragging && !armed && !swiping &&
+          dx > SWIPE_ARM_PX && Math.abs(dx) > Math.abs(dy) * 1.3) {
+        swiping = true;
+        clearTimeout(lp);                 // this gesture is a swipe, never a drag
+        card.style.touchAction = "none";
+        card.classList.add("b-swiping");
+      }
+      if (swiping) { ev.preventDefault(); swipeTo(dx); return; }
+      const far = Math.hypot(dx, dy) > 6;
       if (!dragging) {
-        if (!armed) { if (far) end(ev, true); return; }   // pre-long-press move on touch = scroll → bail
+        if (!armed) {
+          const swipeIntent = canSwipe && dx > 0 && Math.abs(dx) > Math.abs(dy);   // may still become a swipe
+          if (far && !swipeIntent) end(ev, true);   // pre-long-press move on touch = scroll → bail
+          return;
+        }
         if (!far && !isTouch) return;
         begin(ev);
       }
@@ -1434,14 +1567,29 @@ function makeCardDraggable(card, t) {
     };
     // iOS WebKit ignores preventDefault on pointermove (and honours touch-action only as set at
     // gesture start), so it scrolls and fires pointercancel mid-drag — "starts dragging then
-    // drops". A non-passive touchmove that preventDefaults once armed is what actually holds it.
-    const blockScroll = (ev) => { if (armed) ev.preventDefault(); };
+    // drops". A non-passive touchmove that preventDefaults once armed (or swiping) is what holds it.
+    const blockScroll = (ev) => { if (armed || swiping) ev.preventDefault(); };
     const end = (ev, bail) => {
       clearTimeout(lp);
       document.removeEventListener("pointermove", move);
       document.removeEventListener("touchmove", blockScroll);
       document.removeEventListener("pointerup", up);
       document.removeEventListener("pointercancel", cancel);
+      if (swiping) {
+        card.classList.remove("b-swiping", "b-swipe-ready");
+        try { card.releasePointerCapture(id); } catch (_) {}
+        if (!bail && swiped) {
+          completeCard(card, t, "swipe");                 // commit → flick out + collapse + complete
+        } else {
+          card.classList.add("b-swipe-snap");             // under threshold → spring back
+          card.style.transform = "";
+          card.style.removeProperty("--swipe-p");
+          const reset = () => { card.classList.remove("b-swipe-snap"); card.style.touchAction = ""; };
+          card.addEventListener("transitionend", reset, { once: true });
+          setTimeout(reset, 320);
+        }
+        return;
+      }
       const wasDragging = dragging;
       if (dragging && !bail) {
         const col = colAt(ev.clientX, ev.clientY);

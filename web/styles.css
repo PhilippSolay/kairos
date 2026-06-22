@@ -194,6 +194,13 @@ button.ghost.done:hover { border-color: var(--done); color: var(--done); }
   border-radius: 10px; pointer-events: none; transition: all 0.3s var(--ease);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* Interactive toast (carries an Undo action) */
+.toast.toast-action { pointer-events: auto; display: inline-flex; align-items: center; gap: 14px; }
+.toast .toast-act {
+  background: rgba(21, 23, 15, 0.16); color: #15170f; border: 0; font: inherit; font-weight: 700;
+  padding: 3px 11px; border-radius: 7px; cursor: pointer; transition: background 0.15s var(--ease);
+}
+.toast .toast-act:hover { background: rgba(21, 23, 15, 0.28); }
 
 /* ---- Manage ---- */
 .mg-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
@@ -538,6 +545,58 @@ button.btn-danger:active { transform: scale(0.97); }
 .b-card .t-line { font-size: 14px; }
 .b-card .t-crumbs { font-size: 11px; }
 .b-card .t-side { font-size: 11px; gap: 4px; }
+
+/* ---- Complete a task: hover Done button + swipe-left, with a calm settle ---- */
+.b-card { position: relative; }
+.b-card.has-done { transition: border-color 0.15s var(--ease), padding 0.16s var(--ease); }
+.b-card.has-done:hover, .b-card.has-done:focus-within { padding-right: 38px; }   /* opens a slot for the Done control */
+.b-done-btn {
+  position: absolute; right: 9px; top: 50%; transform: translateY(-50%) scale(0.78);
+  width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  border: 1.5px solid var(--faint); background: transparent; color: var(--done);
+  display: grid; place-items: center; cursor: pointer; opacity: 0; pointer-events: none;
+  transition: opacity 0.15s var(--ease), transform 0.18s var(--ease),
+              background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.b-card:hover .b-done-btn, .b-done-btn:focus-visible { opacity: 1; pointer-events: auto; transform: translateY(-50%) scale(1); }
+.b-done-btn:focus-visible { outline: 2px solid var(--done); outline-offset: 2px; }
+.b-done-btn:hover { border-color: var(--done); background: rgba(138, 174, 127, 0.14); }
+.b-done-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor;
+  stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.b-done-btn svg path { stroke-dasharray: 27; stroke-dashoffset: 27; }   /* check hidden until activated */
+.b-done-btn.checked {
+  opacity: 1; pointer-events: auto; background: var(--done); border-color: var(--done); color: #15170f;
+  transform: translateY(-50%) scale(1); animation: done-pop 0.34s var(--ease);
+}
+.b-done-btn.checked svg path { stroke-dashoffset: 0; transition: stroke-dashoffset 0.26s var(--ease) 0.05s; }
+@keyframes done-pop {
+  0% { transform: translateY(-50%) scale(1); }
+  45% { transform: translateY(-50%) scale(1.22); }
+  100% { transform: translateY(-50%) scale(1); }
+}
+
+/* Swipe-left (touch): the card follows the finger and reads jade as it nears the commit line. */
+.b-card.b-swiping { transition: none; cursor: grabbing; will-change: transform; z-index: 1; }
+.b-card.b-swiping::after, .b-card.b-swipe-commit::after {
+  content: "✓ done"; position: absolute; right: 13px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--done); opacity: var(--swipe-p, 0); pointer-events: none;
+}
+.b-card.b-swipe-ready { border-color: var(--done); box-shadow: inset 0 0 0 1px var(--done); }
+.b-card.b-swipe-commit { transition: transform 0.16s var(--ease); z-index: 1; }
+.b-card.b-swipe-snap { transition: transform 0.26s var(--ease); }
+
+/* Shared exit: collapse the slot so neighbours close the gap. */
+.b-card.b-collapsing {
+  overflow: hidden;
+  transition: max-height 0.32s var(--ease), opacity 0.24s var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .b-card.b-swiping, .b-card.b-swipe-commit, .b-card.b-swipe-snap, .b-card.b-collapsing { transition: none; }
+  .b-done-btn, .b-done-btn.checked { animation: none; transition: opacity 0.12s linear; }
+  .b-done-btn.checked svg path { transition: none; }
+}
 
 /* ---- Task edit modal (centered, auto-save) ---- */
 .modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; }
