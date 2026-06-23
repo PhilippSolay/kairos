@@ -548,8 +548,12 @@ button.btn-danger:active { transform: scale(0.97); }
 
 /* ---- Complete a task: hover Done button + swipe-left, with a calm settle ---- */
 .b-card { position: relative; }
-.b-card.has-done { transition: border-color 0.15s var(--ease), padding 0.16s var(--ease); }
-.b-card.has-done:hover, .b-card.has-done:focus-within { padding-right: 38px; }   /* opens a slot for the Done control */
+.b-card.has-done { transition: border-color 0.15s var(--ease); }
+/* On hover the Done control overlays the right-side meta (score/due) rather than
+   opening a padding slot. No layout change → the column can't jump, and the
+   pointer never flickers from content reflowing under it. */
+.b-card.has-done .t-side { transition: opacity 0.15s var(--ease); }
+.b-card.has-done:hover .t-side, .b-card.has-done:focus-within .t-side { opacity: 0; }
 .b-done-btn {
   position: absolute; right: 9px; top: 50%; transform: translateY(-50%) scale(0.78);
   width: 24px; height: 24px; padding: 0; border-radius: 50%;
