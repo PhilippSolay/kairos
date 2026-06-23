@@ -663,6 +663,200 @@ function populateFronts(company, selected) {
   fillSelect($("#ed-front"), frontsForCompany(company).map((f) => [f.code, f.name]), selected, "Select");
 }
 
+// --- Quick entry: structured task creation from the title field -------------
+// Type "@" in the task name to fill Company › Category › Project inline. Each
+// part is a typeahead; ":" / Enter / click commits it, lifts it into the field
+// above, and advances to the next. Category & Project are created on the fly if
+// they don't exist; Company must already exist. This is the inverse of the
+// "Company: Category: Project: Task" string calSummary() emits for calendar.
+const QE_STAGES = ["company", "category", "project"];
+const QE_LABEL = { company: "Company", category: "Category", project: "Project" };
+const qe = { active: false, stage: null, hi: 0, rows: [], busy: false };
+
+function qeInput() { return $("#editor-panel").elements.title; }
+function qeMenu() { return $("#qe-menu"); }
+function qeCompany() { return $("#editor-panel").elements.company.value; }
+function qeGroups() { return [...new Set(mg.tasks.map((t) => t.group).filter(Boolean))].sort(); }
+function qeNext(stage) { return QE_STAGES[QE_STAGES.indexOf(stage) + 1]; }
+
+function qeClose() {
+  qe.active = false; qe.stage = null; qe.hi = 0; qe.rows = [];
+  const m = qeMenu(); m.hidden = true; m.innerHTML = "";
+}
+
+// The current query = the structured body (after "@") up to the next ":".
+function qeQuery() {
+  const v = qeInput().value;
+  const body = v.startsWith("@") ? v.slice(1) : v;
+  const ci = body.indexOf(":");
+  return (ci === -1 ? body : body.slice(0, ci)).trim();
+}
+
+// Candidate rows for a stage given the query. Category/Project gain a "Create …"
+// row when nothing matches exactly (Company never creates — it must exist).
+function qeCandidates(stage, q) {
+  const low = q.toLowerCase();
+  const exists = (list) => list.some((n) => n.toLowerCase() === low);
+  if (stage === "company") {
+    return mg.companies.filter((c) => c.toLowerCase().includes(low))
+      .map((c) => ({ stage, value: c, label: c }));
+  }
+  if (stage === "category") {
+    const co = qeCompany();
+    const fronts = frontsForCompany(co);
+    const rows = fronts.filter((f) => f.name.toLowerCase().includes(low))
+      .map((f) => ({ stage, code: f.code, value: f.name, label: f.name }));
+    if (co && q && !exists(fronts.map((f) => f.name))) {
+      rows.push({ stage, create: true, value: q, label: `Create category “${q}”` });
+    }
+    return rows;
+  }
+  const groups = qeGroups();
+  const rows = groups.filter((g) => g.toLowerCase().includes(low))
+    .map((g) => ({ stage, value: g, label: g }));
+  if (q && !exists(groups)) rows.push({ stage, create: true, value: q, label: `Create project “${q}”` });
+  return rows;
+}
+
+function qeHighlight() {
+  qeMenu().querySelectorAll(".qe-opt").forEach((r, i) => r.classList.toggle("hi", i === qe.hi));
+}
+
+function qeRender() {
+  const m = qeMenu();
+  qe.rows = qeCandidates(qe.stage, qeQuery());
+  if (qe.hi >= qe.rows.length) qe.hi = Math.max(0, qe.rows.length - 1);
+  m.innerHTML = "";
+  m.appendChild(el("div", "qe-head", QE_LABEL[qe.stage]));
+  if (!qe.rows.length) {
+    m.appendChild(el("div", "qe-empty",
+      qe.stage === "company" ? "No matching company" : "Keep typing a name…"));
+  }
+  qe.rows.forEach((c, i) => {
+    const row = el("button", "qe-opt" + (i === qe.hi ? " hi" : "") + (c.create ? " qe-create" : ""), esc(c.label));
+    row.type = "button"; row.setAttribute("role", "option");
+    row.onmousedown = (e) => { e.preventDefault(); qeChoose(c); };
+    row.onmouseenter = () => { qe.hi = i; qeHighlight(); };
+    m.appendChild(row);
+  });
+  m.appendChild(el("div", "qe-hint", "↵ pick · Esc keep as title"));
+  m.hidden = false;
+}
+
+// Resolve typed text to a candidate for the ":"/Enter path: prefer an exact
+// match, then best filter match, then create (category/project only).
+function qeResolve(stage, head) {
+  const q = head.trim();
+  if (!q) return { stage, skip: true };          // "::" or empty Enter → skip this part
+  const rows = qeCandidates(stage, q);
+  const exact = rows.find((r) => !r.create && r.value.toLowerCase() === q.toLowerCase());
+  if (exact) return exact;
+  if (stage === "company") return rows[0] || null;
+  return rows.find((r) => r.create) || rows[0] || null;
+}
+
+async function qeCreateCategory(company, name) {
+  if (!company) return "";
+  try {
+    const r = await api("/api/project/save", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company, name, importance: 3 }),
+    });
+    if (r && r.code) {
+      mg.fronts = [...mg.fronts, { code: r.code, name, surface: company, importance: 3, urgency: null, open: 0 }];
+      return r.code;
+    }
+  } catch (e) { toast("Couldn’t add category."); }
+  return "";
+}
+
+// Apply a chosen candidate to the field above. No save here — the title still
+// holds the "@…" sentinel mid-flow; the terminal path saves with a clean title.
+async function qeCommit(c) {
+  if (c.skip) return;
+  const f = $("#editor-panel").elements;
+  if (c.stage === "company") {
+    f.company.value = c.value;
+    populateFronts(c.value, "");
+  } else if (c.stage === "category") {
+    let code = c.code;
+    if (c.create) code = await qeCreateCategory(qeCompany(), c.value);
+    if (code) populateFronts(qeCompany(), code);   // rebuilds with the new front + selects it
+  } else {
+    f.group.value = c.value;
+  }
+}
+
+// Commit + advance (Enter / click): the whole current query is consumed, so the
+// field resets to a bare "@" prompt for the next stage, or clears when done.
+async function qeChoose(c) {
+  await qeCommit(c);
+  const input = qeInput();
+  const next = qeNext(qe.stage);
+  if (next) { qe.stage = next; qe.hi = 0; input.value = "@"; qeRender(); }
+  else { qeClose(); input.value = ""; scheduleSave(false, 250); }
+  input.focus();
+}
+
+// Leave structured mode, keeping whatever's typed (minus the "@") as the title.
+function qeExitAsTitle() {
+  const input = qeInput();
+  input.value = input.value.replace(/^@/, "");
+  qeClose();
+  scheduleSave(false, 250);
+}
+
+// Entry point from the title field's input event. Returns true when it handled
+// the event so the caller skips the raw-title save (we must not persist "@…").
+function qeOnInput() {
+  const input = qeInput();
+  if (!qe.active) {
+    if (!input.value.startsWith("@")) return false;
+    qe.active = true; qe.stage = "company"; qe.hi = 0;
+  }
+  qeProcess();
+  return true;
+}
+
+// Consume any completed ":"-delimited parts, then render the menu for the rest.
+async function qeProcess() {
+  if (qe.busy) return;
+  qe.busy = true;
+  try {
+    const input = qeInput();
+    while (qe.active) {
+      const v = input.value;
+      if (!v.startsWith("@")) { qeClose(); scheduleSave(false, 700); return; }  // "@" deleted → plain title
+      const body = v.slice(1);
+      const ci = body.indexOf(":");
+      if (ci === -1) break;                          // still typing the current part
+      const head = body.slice(0, ci);
+      const rest = body.slice(ci + 1).replace(/^\s+/, "");
+      const cand = qeResolve(qe.stage, head);
+      if (!cand) { input.value = "@" + head; break; }   // company with no match → drop the ":"
+      await qeCommit(cand);
+      const next = qeNext(qe.stage);
+      if (next) { qe.stage = next; qe.hi = 0; input.value = "@" + rest; }
+      else { qeClose(); input.value = rest; scheduleSave(false, 250); return; }
+    }
+    if (qe.active) qeRender();
+  } finally {
+    qe.busy = false;
+  }
+}
+
+function qeOnKeydown(e) {
+  if (!qe.active) return;
+  if (e.key === "ArrowDown") { e.preventDefault(); qe.hi = Math.min(qe.hi + 1, qe.rows.length - 1); qeHighlight(); return; }
+  if (e.key === "ArrowUp") { e.preventDefault(); qe.hi = Math.max(qe.hi - 1, 0); qeHighlight(); return; }
+  if (e.key === "Enter" || e.key === "Tab") {
+    const c = qe.rows[qe.hi] || qeResolve(qe.stage, qeQuery());
+    if (c) { e.preventDefault(); qeChoose(c); }
+    return;
+  }
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); qeExitAsTitle(); }
+}
+
 function openEditor(t, rawText) {
   const f = $("#editor-panel").elements;
   const company = t ? (t.company || "") : "";    // new task → no preselection (shows "Select")
@@ -690,6 +884,7 @@ function openEditor(t, rawText) {
   if (t && isWebUrl(t.url)) { src.hidden = false; src.href = t.url; } else { src.hidden = true; }
   updateDateChips(f.due.value);
   resetDelete();
+  qeClose();
   $("#ed-saved").textContent = "";
   $("#ed-tips").classList.remove("show");
   $("#editor").hidden = false;
@@ -713,6 +908,7 @@ function flushSave() {
 }
 
 function closeEditor() {
+  qeClose();
   $("#editor").hidden = true;
   flushSave().then(refreshAfterEdit, refreshAfterEdit);
 }
@@ -1792,7 +1988,9 @@ $("#ed-company").onchange = (e) => { populateFronts(e.target.value); scheduleSav
 $("#ed-front").onchange = () => scheduleSave(false, 250);
 {
   const ef = $("#editor-panel").elements;
-  ef.title.oninput = () => scheduleSave(false, 700);
+  ef.title.oninput = () => { if (qeOnInput()) return; scheduleSave(false, 700); };
+  ef.title.onkeydown = qeOnKeydown;
+  ef.title.onblur = () => { if (qe.active) setTimeout(() => { if (qe.active) qeExitAsTitle(); }, 150); };
   ef.group.oninput = () => scheduleSave(false, 700);
   ef.description.oninput = () => scheduleSave(false, 700);
   ef.delegate.oninput = () => scheduleSave(false, 700);

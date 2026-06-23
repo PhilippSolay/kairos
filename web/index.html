@@ -251,7 +251,10 @@
         <label class="fld"><span>Category</span><select name="front" id="ed-front" class="in"></select></label>
         <label class="fld"><span>Project</span><input name="group" id="ed-group" class="in" type="text" list="groups" autocomplete="off" placeholder="optional" /></label>
       </div>
-      <input name="title" class="ed-title" type="text" placeholder="Task name" required />
+      <div class="qe-wrap">
+        <input name="title" class="ed-title" type="text" placeholder="Task name — or @ for Company: Category: Project" required autocomplete="off" />
+        <div id="qe-menu" class="qe-menu" role="listbox" aria-label="Quick entry" hidden></div>
+      </div>
       <div class="tg"><span>Deadline</span>
         <div class="ed-dates" id="ed-dates">
           <button type="button" class="dchip" data-days="0">Today</button>

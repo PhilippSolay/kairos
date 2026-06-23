@@ -672,6 +672,32 @@ button.btn-danger:active { transform: scale(0.97); }
 }
 .ed-title:focus { border-color: var(--accent); }
 .ed-title::placeholder { color: var(--faint); }
+
+/* Quick entry typeahead — "@" in the task name opens Company › Category › Project */
+.qe-wrap { position: relative; }
+.qe-menu[hidden] { display: none; }
+.qe-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 70;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 6px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto;
+}
+.qe-head {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); padding: 4px 10px 2px;
+}
+.qe-opt {
+  display: block; width: 100%; text-align: left; background: transparent; border: 0;
+  color: var(--text); font-family: inherit; font-size: 14px; padding: 9px 10px;
+  border-radius: 8px; cursor: pointer; transition: background 0.12s var(--ease);
+}
+.qe-opt:hover, .qe-opt.hi { background: var(--surface-2); }
+.qe-create { color: var(--accent); }
+.qe-empty { font-size: 13px; color: var(--faint); padding: 8px 10px; }
+.qe-hint {
+  font-size: 11px; color: var(--faint); padding: 6px 10px 2px;
+  border-top: 1px solid var(--border); margin-top: 2px;
+}
 .ed-dates { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .dchip { border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: inherit; font-size: 13px; padding: 8px 14px; border-radius: 20px; cursor: pointer; transition: all 0.15s var(--ease); }
 .dchip:hover { color: var(--text); border-color: var(--faint); }
