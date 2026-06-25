@@ -24,6 +24,8 @@ jobs:
           python-version: '3.12'
       - name: Run suite (stdlib-only, no deps)
         run: python -m unittest test_kiros test_auth test_isolation test_backups test_conflict test_offline_sw
+      - name: Run JS offline-logic tests (node built-in, no deps)
+        run: node --test web/offline.test.js
 
   build-and-push:
     name: Build & push image

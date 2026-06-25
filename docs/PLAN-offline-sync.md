@@ -1,7 +1,9 @@
 # PLAN — Offline support + sync
 
-**Status (2026-06-22):** **Phase 0 BUILT + verified locally** (offline READ — manifest + service worker + IndexedDB board snapshot). Not yet committed/deployed. Phases 1–2 pending.
+**Status (2026-06-23):** **Phase 0 SHIPPED to prod** (offline READ — commit `3677b7e`). **Phase 1 BUILT + verified locally** (offline WRITES — outbox + optimistic apply + replay), not yet deployed. **Phase 2 (font self-host) skipped as redundant** — the SW already runtime-caches the serif, so it survives offline after the first online load (which always happens).
 **Decisions locked (Philipp):** offline scope = **Everything** (capture, complete, edit, move, *and* drag-reorder); conflict policy = **silent last-write-wins** (offline change wins, no prompt); rollout = **Phase 0 first**; offline scores = **frozen until resync** (no JS scoring port).
+
+**Phase 1 verification (local, port 8766):** offline (fetch forced to fail) → completed a task + captured + edited another; all three applied optimistically (chip "Offline · 3", board re-rendered from the mutated snapshot); reconnect → outbox drained → server board confirmed: completed task now `[x]` in Done, edit persisted with the new title (no duplicate, fields preserved), both captures landed as Inbox intake lines. Outbox empty, chip back to synced. Pure logic (applyOp + raw-chain threading incl. chained-edit and edit-then-complete) covered by `web/offline.test.js` (13 node:test cases); both suites in CI (113 Python + 13 JS).
 
 **Phase 0 verification (local, port 8766):** SW registered + activated + controlling; shell cache `kiros-shell-<md5>` holds all 9 versioned assets + the runtime-cached serif font; GETs (`/api/board`, `/api/tasks`, `/api/me`, `/api/prefs`) snapshotted to IndexedDB; with `fetch` forced to fail, Board + Today re-render from cache (7 cards) and a tappable multi-state status chip (● Offline + ⟳) shows; tapping it (or the browser's `online` event) probes, refreshes the screen, and hides it. `/sw.js` token-injection unit-tested (`test_offline_sw.py`); 113 tests green; no console errors.
 
@@ -84,6 +86,7 @@ RECONNECT         online event / app foreground / startup ──> drainOutbox()
 1. **Scores/day-plan freeze offline.** Priority is computed server-side (`kiros.py`); offline edits don't re-rank until resync. Porting scoring to JS = big + DRY violation → **out of scope**. Offline = execute/triage with last-synced order; reconnect re-ranks.
 2. **Cross-device same-task conflict = fingerprint match.** With no stable IDs, a replay `409` resolves by matching `title+section+project`. Collision needs two tasks identical on all three — rare on a personal board. Worst case: a near-duplicate line, recoverable from board backups (commit `e50db9b`). If this ever bites, the fix is opt-in `id:` meta (deferred).
 3. **Lost-response retry** (server applied the op but the response dropped): retry sees `409` → LWW re-issues identical content → no-op. Harmless.
+4. **Offline capture shows as a board card, lands as intake.** `/api/capture` stores a raw `- text` intake line (not a parsed task), so the optimistic snapshot shows the capture as an Inbox card, but after sync+reconcile it appears in the Manage → Intake refine area instead. No data loss — the capture persists; only its location shifts after sync. Minor; matching it offline would mean modelling the intake collection too.
 
 ## 7. Files
 

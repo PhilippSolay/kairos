@@ -32,53 +32,82 @@ async function api(path, opts) {
     if (method === "GET") kirosOffline.snapshotPut(path, data);  // remember for offline (best-effort)
     return data;
   } catch (err) {
-    // Network failure on a GET → serve the last snapshot so the app still opens offline.
-    if (method === "GET" && isOfflineError(err)) {
-      const cached = await kirosOffline.snapshotGet(path);
-      if (cached !== null) { setNetState(false); return cached; }
+    if (isOfflineError(err)) {
+      // GET → serve the last snapshot so the app still opens offline.
+      if (method === "GET") {
+        const cached = await kirosOffline.snapshotGet(path);
+        if (cached !== null) { setNetState(false); return cached; }
+      }
+      // Queueable write → enqueue + optimistically apply; the caller's reload re-renders it.
+      if (method === "POST" && OFFLINE_WRITES.has(path)) {
+        setNetState(false);
+        return kirosOffline.queueWrite(path, JSON.parse(opts.body || "{}"));
+      }
     }
     throw err;
   }
 }
+
+// Writes safe to make offline — they round-trip through the outbox + replay. Other
+// POSTs (structure edits, prefs, login) still fail offline rather than queue.
+const OFFLINE_WRITES = new Set(["/api/complete", "/api/task/save", "/api/capture", "/api/reorder", "/api/task/delete"]);
 
 // A rejected fetch (TypeError) — or a known-offline navigator — means unreachable.
 function isOfflineError(err) {
   return err instanceof TypeError || !navigator.onLine;
 }
 
-// Header status chip. States: synced (hidden — no noise when all's well),
-// offline, syncing, pending ("N to sync", Phase 1). Synced is invisible by design.
+// --- Status chip + sync -----------------------------------------------------
+// One multi-state chip: synced (hidden — no noise) / offline / syncing / pending.
 let netOnline = true;
-function setNetState(online) {
-  netOnline = online;
+let pendingCount = 0;
+function refreshChip() {
   const pill = document.getElementById("net-pill");
   if (!pill) return;
-  pill.dataset.state = online ? "synced" : "offline";
-  pill.hidden = online;
+  let state, text;
+  if (kirosOffline.isDraining()) { state = "syncing"; text = "Syncing…"; }
+  else if (!netOnline) { state = "offline"; text = pendingCount ? `Offline · ${pendingCount}` : "Offline"; }
+  else if (pendingCount) { state = "pending"; text = `${pendingCount} to sync`; }
+  else { state = "synced"; text = "Synced"; }
+  pill.dataset.state = state;
+  pill.hidden = state === "synced";
   const label = pill.querySelector(".net-label");
-  if (label) label.textContent = online ? "Synced" : "Offline";
+  if (label) label.textContent = text;
+}
+function setNetState(online) { netOnline = online; refreshChip(); }
+function updatePending() {
+  return kirosOffline.countOps().then((n) => { pendingCount = n; refreshChip(); return n; });
 }
 
-// Re-render the open screen — each loader re-fetches, and the first successful
-// GET flips us back online via api(). Used on reconnect and on a manual tap.
+// Re-render the open screen — each loader re-fetches (offline: from the mutated
+// snapshot; online: server truth, which also un-freezes the priority scores).
 function reloadActiveView() { switchView(viewFromHash()); }
 
-// Tap the chip to retry now. Spin while probing; a success hides the chip and
-// refreshes the screen, a failure restores the offline state. (In Phase 1 this
-// also flushes the write outbox — same control, richer job.)
-async function retrySync() {
-  const pill = document.getElementById("net-pill");
-  if (netOnline || !pill) { reloadActiveView(); return; }
-  pill.dataset.state = "syncing";
-  try { await api("/api/me"); } catch (e) { /* still offline */ }
-  if (netOnline) reloadActiveView();
-  else pill.dataset.state = "offline";
+// Flush now: if offline, probe first; then drain the outbox and reconcile. Also
+// the chip's tap action and what fires on reconnect (online event / app focus).
+let syncing = false;
+async function syncNow() {
+  if (syncing || kirosOffline.isDraining()) return;
+  syncing = true;
+  try {
+    if (!netOnline) { try { await api("/api/me"); } catch (e) { /* probe */ } }
+    if (!netOnline) return;                                 // still offline → nothing to flush
+    if (!pendingCount) { reloadActiveView(); return; }
+    const r = await kirosOffline.drain();
+    if (r.authFailed) { location.href = "/login"; return; }
+    await updatePending();
+    reloadActiveView();                                     // reconcile with server truth
+  } finally {
+    syncing = false;
+  }
 }
 
 window.addEventListener("offline", () => setNetState(false));
-window.addEventListener("online", () => { setNetState(true); reloadActiveView(); });
+window.addEventListener("online", () => { setNetState(true); syncNow(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && netOnline && pendingCount) syncNow(); });
+kirosOffline.setOnChange(updatePending);   // queueWrite/drain bump the count → chip refreshes
 const netPillEl = document.getElementById("net-pill");
-if (netPillEl) netPillEl.addEventListener("click", retrySync);
+if (netPillEl) netPillEl.addEventListener("click", syncNow);
 const isWebUrl = (u) => /^https?:\/\//i.test(u || "");   // a real, clickable source link — not a local description key
 
 let nowChoice = { energy: null, time: "" };
@@ -2584,3 +2613,4 @@ if ("serviceWorker" in navigator) {
 }
 kirosOffline.requestPersist();
 if (!navigator.onLine) setNetState(false);  // reflect a cold offline start in the pill
+updatePending().then(() => { if (netOnline && pendingCount) syncNow(); });  // flush anything queued before a reload
