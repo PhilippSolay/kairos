@@ -119,13 +119,14 @@ function circleChip(t) {
   return `<div class="circle-chip">you've circled this ${days} — that's the signal, not a reason to wait</div>`;
 }
 
-function metaLine(t) {
-  const bits = [];
-  if (t.frontName) bits.push(t.frontName);
-  if (t.est) bits.push({ S: "small", M: "medium", L: "big", XL: "huge" }[t.est] || t.est);
-  if (t.due) bits.push("due " + t.due);
-  return bits.join(" · ");
+// Effort estimate as a readable label — time buckets pass through ("1h", "30m"),
+// legacy size codes expand (S→small … XL→huge).
+function effortLabel(est) {
+  return est ? ({ S: "small", M: "medium", L: "big", XL: "huge" }[est] || est) : "";
 }
+
+// Calendar glyph — matches the editor's #ed-cal button.
+const CAL_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
 
 function focusCard(t, eyebrow) {
   const card = el("div", "card");
@@ -142,9 +143,14 @@ function focusCard(t, eyebrow) {
   const actions = card.querySelector(".frog-actions");
   const start = el("button", "primary", "Start · 2 min");
   const done = el("button", "ghost done", "Done ✓");
+  const cal = el("button", "frog-cal", CAL_ICON);
+  cal.type = "button";
+  cal.title = "Add to Apple Calendar (today, 2am)";
+  cal.setAttribute("aria-label", "Add to Apple Calendar");
   start.onclick = (e) => { e.stopPropagation(); startTimer(actions, start); };
   done.onclick = (e) => { e.stopPropagation(); complete(t.raw); };
-  actions.append(start, done);
+  cal.onclick = (e) => { e.stopPropagation(); addTaskToCalendar(t); };
+  actions.append(start, done, cal);
   card.style.cursor = "pointer";
   card.onclick = () => openEditor(t);                         // tap card to edit (its buttons stop propagation)
   return card;
@@ -176,7 +182,7 @@ function renderProgress(p, hours) {
   let label;
   if (p.dayComplete) label = "That's the day. ✓ Plan's done — rest counts as productive.";
   else if (p.done === 0) label = `Today's plan: ${p.planned} ${p.planned === 1 ? "thing" : "things"} — a right-sized day.`;
-  else label = `${p.done} of ${p.planned} done. Keep the thread.`;
+  else label = `${p.done} of ${p.planned} done.`;
   const hoursTag = hours ? ` · <span class="dp-hours ${hours > DAY_CAP_HOURS ? "over" : ""}">${fmtHours(hours)}</span>` : "";
   box.innerHTML = `<div class="dp-dots">${dots}</div><div class="dp-label">${label}${hoursTag}</div>`;
 }
@@ -222,22 +228,9 @@ function renderToday(data) {
 
   const more = $("#more");
   more.innerHTML = "";
-  items.slice(1).forEach((t, i) => {
-    const row = el("div", "more-row");
-    row.innerHTML = `
-      <span class="more-rank">${i + 2}</span>
-      <div class="more-body">
-        <div class="more-title">${esc(t.title)}</div>
-        <div class="more-meta">${esc(metaLine(t))}</div>
-      </div>`;
-    const tick = el("button", "tick", "✓");
-    tick.title = "Done";
-    tick.onclick = (e) => { e.stopPropagation(); complete(t.raw); };
-    row.appendChild(tick);
-    row.style.cursor = "pointer";
-    row.onclick = () => openEditor(t);                        // tap a row to edit (tick stops propagation)
-    more.appendChild(row);
-  });
+  // The rest of Today uses the Board card (with effort shown). Reorder lives on the
+  // Board, so these are drag-free — tap to edit, hover/swipe to complete.
+  items.slice(1).forEach((t) => more.appendChild(boardCard(t, { effort: true, drag: false })));
 
   const hidden = total - items.length;
   const arranged = todaySort === "manual" ? "Your arranged order — drag to reorder on the Board. " : "";
@@ -533,7 +526,7 @@ function renderTable() {
 
 // Shared card body. Left: row1 Company · Section, row2 Project | Task Name (same size/weight).
 // Right (stacked): Status · Priority · Deadline. Status is omitted on the board (column = status).
-function cardBody(t, showStatus) {
+function cardBody(t, showStatus, showEffort) {
   const overdue = t.due && t.due < mg.date ? "due-over" : "";
   const section = (t.frontName || t.front || "").split("—")[0].trim();
   const crumbs = [t.company, section].filter(Boolean).map(esc).join(" · ");
@@ -541,13 +534,14 @@ function cardBody(t, showStatus) {
   const link = isWebUrl(t.url) ? ` <a class="t-link" href="${esc(t.url)}" target="_blank" rel="noopener" title="Open source ↗" onclick="event.stopPropagation()">↗</a>` : "";
   const proj = t.group ? `<span class="t-proj">${esc(t.group)}</span><span class="t-sep">|</span>` : "";
   const due = t.due ? `<span class="t-due ${overdue}">${esc(relativeDue(t.due, mg.date))}</span>` : "";
+  const effort = showEffort && t.est ? `<span class="t-est" title="Effort">${esc(effortLabel(t.est))}</span>` : "";
   const status = showStatus ? `<span class="lane lane-${t.lane}">${esc(laneLabel(t.lane))}</span>` : "";
   return `
     <div class="t-main">
       ${crumbs ? `<div class="t-crumbs">${crumbs}</div>` : ""}
       <div class="t-line">${proj}<span class="t-task">${esc(t.title)}</span>${flag}${link}</div>
     </div>
-    <div class="t-side">${status}<span class="t-prio" title="Priority score">${t.score ?? "·"}</span>${due}</div>`;
+    <div class="t-side">${status}<span class="t-prio" title="Priority score">${t.score ?? "·"}</span>${effort}${due}</div>`;
 }
 function taskCard(t) {
   const card = el("div", "t-card");
@@ -1031,23 +1025,20 @@ function calSummary(f) {
   // Company: Section: Project: Task — empty parts dropped so it never reads "A: : C".
   return [f.company.value, section, f.group.value, f.title.value.trim()].filter(Boolean).join(": ");
 }
-function addToCalendar() {
-  const f = $("#editor-panel").elements;
-  const title = f.title.value.trim();
-  if (!title) { $("#ed-saved").textContent = "needs a name first"; return; }
+// Build + download a single-event .ics (today 02:00–02:30, floating local time).
+function downloadIcs(title, summary, description) {
   const p2 = (n) => String(n).padStart(2, "0");
   const now = new Date();
   const ymd = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}`;
   const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const uid = `kiros-${ymd}-${calSlug(title)}@kiros.local`;
-  const desc = [f.description.value, isWebUrl(f.url.value) ? f.url.value : ""].filter(Boolean).join("\n\n");
   const lines = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kiros//Task//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     "BEGIN:VEVENT", `UID:${uid}`, `DTSTAMP:${stamp}`,
     `DTSTART:${ymd}T020000`, `DTEND:${ymd}T023000`,
-    `SUMMARY:${icsEscape(calSummary(f))}`,
+    `SUMMARY:${icsEscape(summary)}`,
   ];
-  if (desc) lines.push(`DESCRIPTION:${icsEscape(desc)}`);
+  if (description) lines.push(`DESCRIPTION:${icsEscape(description)}`);
   lines.push("END:VEVENT", "END:VCALENDAR");
   const ics = lines.map(icsFold).join("\r\n") + "\r\n";
   const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
@@ -1055,9 +1046,32 @@ function addToCalendar() {
   a.href = url; a.download = `${calSlug(title)}.ics`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast("Calendar file ready — open it to add to Apple Calendar.");
+}
+
+// "Company: Section: Project: Task" — empty parts dropped — from a task object.
+function taskCalSummary(t) {
+  const section = (t.frontName || t.front || "").split("—")[0].trim();
+  return [t.company, section, t.group, (t.title || "").trim()].filter(Boolean).join(": ");
+}
+
+// From the editor form (uses the in-progress field values + inline button feedback).
+function addToCalendar() {
+  const f = $("#editor-panel").elements;
+  const title = f.title.value.trim();
+  if (!title) { $("#ed-saved").textContent = "needs a name first"; return; }
+  const desc = [f.description.value, isWebUrl(f.url.value) ? f.url.value : ""].filter(Boolean).join("\n\n");
+  downloadIcs(title, calSummary(f), desc);
   const btn = $("#ed-cal"); btn.classList.add("ok");
   setTimeout(() => btn.classList.remove("ok"), 1500);
-  toast("Calendar file ready — open it to add to Apple Calendar.");
+}
+
+// From a task object (e.g. the Today focus card) — same single-event .ics as the editor.
+function addTaskToCalendar(t) {
+  const title = (t.title || "").trim();
+  if (!title) return;
+  const desc = [t.description, isWebUrl(t.url) ? t.url : ""].filter(Boolean).join("\n\n");
+  downloadIcs(title, taskCalSummary(t), desc);
 }
 
 // --- Stats (a mirror, not a scoreboard) ------------------------------------
@@ -1674,11 +1688,14 @@ async function undoComplete(t) {
   }
 }
 
-function boardCard(t) {
+// opts.effort → show the effort estimate; opts.drag === false → no board drag-drop
+// (Today reuses this card but reorders on the Board, so it only keeps tap + swipe).
+function boardCard(t, opts = {}) {
   const card = el("div", "b-card");
-  card.innerHTML = cardBody(t, false);   // status hidden on the board — the column IS the status
+  card.innerHTML = cardBody(t, false, opts.effort);   // status hidden on the board — the column IS the status
+  if (opts.drag === false) card.classList.add("b-static");
   if (!t.done) addDoneButton(card, t);   // hover-reveal complete affordance (desktop); swipe covers touch
-  makeCardDraggable(card, t);
+  makeCardDraggable(card, t, { noDrag: opts.drag === false });
   return card;
 }
 
@@ -1773,15 +1790,16 @@ function showDropLine(col, y) {
 
 // Pointer-based drag for a board card: mouse drags on move; touch needs a long-press
 // (so a quick swipe still scrolls the board). A tap (no drag) opens the editor.
-function makeCardDraggable(card, t) {
+function makeCardDraggable(card, t, opts = {}) {
+  const noDrag = opts.noDrag;   // tap + swipe still work; only board drag-drop is suppressed
   card.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const isTouch = e.pointerType === "touch";
     const id = e.pointerId, sx = e.clientX, sy = e.clientY;
-    let dragging = false, armed = !isTouch, ghost = null;
+    let dragging = false, armed = !isTouch && !noDrag, ghost = null;
     let swiping = false, swiped = false;            // swipe-right-to-complete (touch, non-Done cards only)
     const canSwipe = isTouch && !t.done;
-    const lp = isTouch ? setTimeout(() => { armed = true; card.style.touchAction = "none"; if (navigator.vibrate) navigator.vibrate(12); }, 250) : 0;
+    const lp = (isTouch && !noDrag) ? setTimeout(() => { armed = true; card.style.touchAction = "none"; if (navigator.vibrate) navigator.vibrate(12); }, 250) : 0;
     const swipeTo = (dx) => {
       const d = Math.min(SWIPE_MAX_PX, Math.max(0, dx));
       card.style.transform = "translateX(" + d + "px)";
@@ -2581,16 +2599,12 @@ function initAppearance() {
   api("/api/prefs").then((p) => { applyUiPrefs(p); if (!uiPrefs.onboarded) showOnboarding(); }).catch(() => {});
 }
 
-// Account menu + per-user calendar feed (needs this user's private ics token).
+// Account menu — reveals the admin link for admins.
 async function initAccount() {
   let me;
   try { me = await api("/api/me"); } catch (e) { return; }
   const adminLink = $("#account-admin");
   if (adminLink) adminLink.hidden = !me.isAdmin;
-  const calSub = $("#cal-sub");
-  if (calSub && me.icsToken) calSub.href = "webcal://" + location.host + "/u/" + me.icsToken + "/kiros.ics";
-  const calDl = document.querySelector(".cal-dl");
-  if (calDl && me.icsToken) calDl.href = "/u/" + me.icsToken + "/kiros.ics?download=1";
 }
 const accountBtn = $("#account-btn");
 if (accountBtn) accountBtn.onclick = (e) => { e.stopPropagation(); $("#account-menu").classList.toggle("open"); };
