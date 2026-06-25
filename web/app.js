@@ -1296,6 +1296,9 @@ function renderStructure() {
         if (v && v !== f.name) structurePost("/api/front/update", { code: f.code, name: v }, "Category renamed.");
         else nameIn.value = f.name;
       };
+      const open = f.open || 0;
+      const count = el("span", "struct-pcount", String(open));
+      count.title = `${open} open task${open === 1 ? "" : "s"}`;
       const impSel = document.createElement("select");
       impSel.className = "struct-imp-sel";
       impSel.title = "Default importance for tasks in this category";
@@ -1304,7 +1307,7 @@ function renderStructure() {
       const del = el("button", "struct-del", "×");
       del.title = "Delete category";
       del.onclick = () => deleteProject(f.code, f.name);
-      row.append(nameIn, impSel, del);
+      row.append(nameIn, count, impSel, del);
       sec.appendChild(row);
     });
     const form = document.createElement("form");

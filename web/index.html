@@ -112,7 +112,7 @@
           <div id="account-menu" class="account-menu" role="menu">
             <button id="account-profile" class="account-item" type="button" role="menuitem">Profile</button>
             <button id="account-appearance" class="account-item" type="button" role="menuitem">Appearance</button>
-            <button id="account-structure" class="account-item" type="button" role="menuitem">Companies &amp; Categories</button>
+            <button id="account-structure" class="account-item" type="button" role="menuitem">Categories</button>
             <a id="account-admin" href="/admin" class="account-item" role="menuitem" hidden>Admin dashboard</a>
             <button id="account-logout" class="account-item" type="button" role="menuitem">Log out</button>
           </div>
@@ -252,7 +252,7 @@
         <label class="fld"><span>Project</span><input name="group" id="ed-group" class="in" type="text" list="groups" autocomplete="off" placeholder="optional" /></label>
       </div>
       <div class="qe-wrap">
-        <input name="title" class="ed-title" type="text" placeholder="Task name — or @ for Company: Category: Project" required autocomplete="off" />
+        <input name="title" class="ed-title" type="text" placeholder="Task name (use @ to quick add)" required autocomplete="off" />
         <div id="qe-menu" class="qe-menu" role="listbox" aria-label="Quick entry" hidden></div>
       </div>
       <div class="tg"><span>Deadline</span>
@@ -423,7 +423,7 @@
     <div class="editor-scrim" data-sclose></div>
     <div class="editor-panel">
       <div class="editor-head">
-        <h2>Companies &amp; Categories</h2>
+        <h2>Categories</h2>
         <button type="button" class="editor-x" data-sclose aria-label="Close">✕</button>
       </div>
       <form id="company-form" class="struct-addco">

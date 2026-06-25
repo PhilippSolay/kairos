@@ -401,6 +401,7 @@ button.btn-danger:active { transform: scale(0.97); }
 }
 .struct-pname-in:hover { border-color: var(--border); }
 .struct-pname-in:focus { border-color: var(--accent); background: var(--surface-2); }
+.struct-pcount { flex: 0 0 auto; opacity: 0.5; color: var(--text); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .struct-imp-sel { flex: 0 0 auto; width: auto; background: transparent; border: 1px solid transparent; color: var(--faint); font-family: inherit; font-size: 12px; padding: 4px 6px; border-radius: 8px; cursor: pointer; outline: none; }
 .struct-imp-sel:hover { border-color: var(--border); color: var(--muted); }
 .struct-imp-sel:focus { border-color: var(--accent); }
