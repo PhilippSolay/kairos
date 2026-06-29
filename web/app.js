@@ -1954,6 +1954,19 @@ function startLaneRename(span, lane) {
   input.focus(); input.select();
   setTimeout(() => document.addEventListener("mousedown", onDoc, true), 0);
 }
+// Today column gets a total-effort pill: sum each card's server-provided effort
+// (EST_EFFORT points, same "h" unit as the Today screen), coloured by day load —
+// green under 7h, amber through 9h, red beyond.
+const EFFORT_OK_MAX_H = 7, EFFORT_WARN_MAX_H = 9;
+function effortPill(items) {
+  const total = items.reduce((sum, t) => sum + (t.effort || 0), 0);
+  if (!total) return null;
+  const tier = total < EFFORT_OK_MAX_H ? "ok" : total <= EFFORT_WARN_MAX_H ? "warn" : "over";
+  const pill = el("span", `board-effort ${tier}`, fmtHours(total));
+  pill.title = "Total effort in this column";
+  return pill;
+}
+
 function renderBoard() {
   const board = $("#board");
   board.innerHTML = "";
@@ -1980,7 +1993,11 @@ function renderBoard() {
     const labelSpan = el("span", `lane lane-${lane}`, esc(laneLabel(lane)));
     labelSpan.title = "Click to rename";
     labelSpan.onclick = () => startLaneRename(labelSpan, lane);
-    head.append(labelSpan, el("span", "board-count", String(items.length)));
+    const right = el("div", "board-head-right");
+    const pill = lane === "today" ? effortPill(items) : null;   // Today column shows its total effort
+    if (pill) right.appendChild(pill);
+    right.appendChild(el("span", "board-count", String(items.length)));
+    head.append(labelSpan, right);
     col.appendChild(head);
     const body = el("div", "board-col-body");
     if (!items.length) body.appendChild(el("div", "board-empty", "—"));

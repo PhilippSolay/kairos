@@ -388,6 +388,7 @@ def task_dict(task, board, today: date, score=None, lane: str = "", descriptions
         "title": task.title, "front": task.front, "frontName": front.name if front else "",
         "group": task.group, "company": front.surface if front else "",
         "importance": task.importance, "urgency": task.urgency, "est": task.est,
+        "effort": effort_of(task.est),   # numeric effort (EST_EFFORT points) for client-side column totals
         "due": task.due.isoformat() if task.due else None, "energy": task.energy,
         "avoid": task.avoid, "delegate": task.delegate, "url": task.url,
         "description": (descriptions or {}).get(task.url, "") if task.url else "",
